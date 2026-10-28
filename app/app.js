@@ -34,6 +34,7 @@
     var scale=Math.min(width/1920,height/1080);
     stage.style.transform='scale('+scale+')';
     stage.style.left=((width-1920*scale)/2)+'px'; stage.style.top=((height-1080*scale)/2)+'px';
+    viewport.querySelectorAll('.home-rail').forEach(function(rail){if(rail._updateControls)rail._updateControls();});
   }
   addEventListener('resize',fit); fit();
   function element(tag, cls, text) {
@@ -267,9 +268,10 @@
       },'rail-'+(direction<0?'prev-':'next-')+index);b.setAttribute('aria-label',direction<0?'Листать назад: '+spec[0]:'Листать вперёд: '+spec[0]);b.setAttribute('aria-controls',rail.id);controls.appendChild(b);arrows.push(b);
     });
     function update(){
+      if(index==='continue'){var fits=rail.scrollWidth<=rail.clientWidth+2;if(fits&&controls.contains(document.activeElement))focus(rail.querySelector('.movie-card'),false);controls.hidden=fits;arrows.forEach(function(arrow){arrow.disabled=fits;});}
       arrows[0].setAttribute('aria-disabled',String(rail.scrollLeft<8));arrows[1].setAttribute('aria-disabled',String(rail.scrollLeft>=rail.scrollWidth-rail.clientWidth-8));
     }
-    rail.addEventListener('scroll',update);heading.appendChild(controls);section.appendChild(heading);section.appendChild(rail);requestAnimationFrame(update);return section;
+    if(index==='continue')controls.hidden=true;rail._updateControls=update;rail.addEventListener('scroll',update);heading.appendChild(controls);section.appendChild(heading);section.appendChild(rail);requestAnimationFrame(update);return section;
   }
   function featured(items,ready,resume) {
     function unique(list){var seen={};return list.filter(function(item){var id=WePlayCatalogUnion.canonical(item.id);if(seen[id])return false;seen[id]=true;return true;}).slice(0,12);}
