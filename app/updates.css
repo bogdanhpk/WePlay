@@ -1,0 +1,18 @@
+.update-control{position:relative;display:inline-flex;flex-shrink:0;border-radius:999px}
+.update-action{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-height:52px;padding:12px 24px;border:0;border-radius:999px;background:#f5f5f5;color:#111;font-size:20px;line-height:28px;font-weight:700;white-space:nowrap}
+.update-action .icon{width:24px;height:24px;margin-right:12px}
+.update-action .button-label{display:inline}
+.update-action:focus{background:#f5f5f5;color:#111}
+.detail-header-actions .update-action{min-height:64px;padding-top:16px;padding-bottom:16px}
+#update-modal{position:absolute;z-index:41;left:0;top:0;width:1920px;height:1080px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72)}
+.update-open .update-aura::before,.update-open .update-aura::after{animation-play-state:paused}
+
+.update-aura{position:absolute;top:12px;right:12px;bottom:12px;left:12px;border-radius:999px;pointer-events:none;opacity:1;box-shadow:-20px -4px 40px 8px rgba(172,104,255,.9),20px 4px 40px 8px rgba(37,174,255,.85),0 16px 40px 8px rgba(255,79,155,.75);transition:opacity 150ms cubic-bezier(.2,0,0,1)}
+.update-control:focus-within .update-aura{opacity:1}
+.update-aura::before,.update-aura::after{content:"";position:absolute;top:0;right:0;bottom:0;left:0;border-radius:inherit;pointer-events:none;animation:update-light-flow 8s cubic-bezier(.77,0,.175,1) infinite}
+.update-aura::before{box-shadow:-24px -4px 40px 8px rgba(172,104,255,.85),20px 4px 40px 8px rgba(37,174,255,.75)}
+.update-aura::after{box-shadow:20px -4px 40px 8px rgba(255,79,155,.85),-20px 8px 40px 8px rgba(37,174,255,.75);animation-delay:-4s}
+.support-motion-paused .update-aura::before,.support-motion-paused .update-aura::after{animation-play-state:paused}
+@keyframes update-light-flow{0%,100%{opacity:.15;transform:translate3d(-8px,-2px,0) scale(.98)}50%{opacity:.85;transform:translate3d(8px,2px,0) scale(1.04)}}
+@media(hover:hover) and (pointer:fine){.update-action:hover{background:#dcdcdc}.update-action:focus:hover{background:#f5f5f5}}
+@media(prefers-reduced-motion:reduce){.update-aura,.update-action{transition:none}.update-aura::before,.update-aura::after{animation:none;opacity:0;transform:none}}

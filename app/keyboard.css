@@ -1,0 +1,49 @@
+/* Fixed TV composition: keyboard and results remain available together. */
+.view-search{height:100%;min-height:0}
+#content.route-search{overflow:hidden}
+.view-search>.page-header{height:108px;min-height:108px;margin-bottom:40px}
+/* An explicit track and an out-of-flow scroller prevent Tizen 5.5 content sizing. */
+.search-workspace{display:grid;grid-template-columns:704px minmax(0,1fr);grid-template-rows:minmax(0,1fr);grid-gap:48px;height:calc(100% - 148px);min-height:0;align-items:start}
+.search-input-panel{min-width:0}
+.view-search .search-form{display:block;margin:0}
+.view-search .search-field{flex:none;margin:0;width:100%}
+.view-search .search-field>.icon{z-index:1;top:28px}
+.search-query-display{position:relative;display:flex;align-items:center;width:100%;height:88px;min-height:88px;padding:24px 80px;font-size:30px;line-height:36px;background:#1f1f1f;border:1px solid #313131;border-radius:24px;color:#f5f5f5;text-align:left;white-space:nowrap}
+.search-query-display:focus{background:#272727}
+.query-scroll{display:block;min-width:0;flex:1;overflow:hidden;white-space:pre}
+.query-entry{display:inline-block;white-space:pre;vertical-align:middle}
+.query-caret{display:none;vertical-align:-4px;width:2px;height:32px;background:#f5f5f5;margin:0 1px}
+.query-editing .query-caret{display:inline-block}
+.query-empty .query-entry{color:#929292}
+.query-selected{background:#f5f5f5;color:#111;border-radius:4px}
+.query-selected .query-caret{display:none}
+.view-search .search-form>.primary{width:100%;height:64px;min-width:0;min-height:64px;padding:16px 24px;margin-top:16px;border-radius:24px;font-size:24px;line-height:32px}
+.tv-keyboard{margin-top:24px}
+.tv-keyboard-languages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-gap:8px;margin-bottom:16px}
+.tv-keyboard-languages .tv-key{height:56px;min-height:56px;font-size:20px;line-height:28px;color:#a0a0a0}
+.tv-keyboard-languages .selected{color:#f5f5f5;background:#313131}
+.tv-keyboard-letters{display:grid;grid-template-rows:repeat(3,72px);grid-row-gap:8px;height:232px}
+.tv-keyboard-row{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));grid-column-gap:4px}
+.tv-keyboard-row .tv-key{height:72px;min-height:72px;padding:12px 4px}
+.tv-key{display:flex;align-items:center;justify-content:center;width:100%;height:64px;min-height:64px;padding:12px 8px;border:0;border-radius:16px;background:#1f1f1f;color:#f5f5f5;font-size:30px;line-height:36px;text-align:center;white-space:nowrap}
+.tv-key:focus,.tv-key:hover,.tv-keyboard-languages .tv-key:focus{background:#f5f5f5;color:#111}
+.tv-key .icon{width:32px;height:32px;margin:0}
+.tv-key svg{display:block;width:100%;height:100%}
+.tv-keyboard-actions{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-gap:8px;margin-top:16px}
+.tv-keyboard-actions .tv-key{font-size:24px;line-height:32px}
+.tv-key-space{grid-column:span 3}
+.search-results-panel{position:relative;height:100%;min-height:0;min-width:0;overflow:hidden}
+.search-results-scroll{position:absolute;top:0;right:0;bottom:0;left:0;min-height:0;overflow-x:hidden;overflow-y:auto;padding:8px;scrollbar-width:thin;scrollbar-color:#444 transparent}
+.search-results-scroll::-webkit-scrollbar{width:4px}
+.search-results-scroll::-webkit-scrollbar-thumb{background:#444;border-radius:2px}
+.search-results-scroll>.section-heading{margin:0 0 16px}
+.search-results-scroll .grid:not(.home-rail){grid-template-columns:repeat(3,minmax(0,1fr))}
+.search-results-scroll .grid .poster-wrap{position:relative;height:0;padding-bottom:calc(56.25% - 2px)}
+.search-results-scroll .grid .poster-wrap img{position:absolute;left:0;top:0}
+.search-results-scroll .grid .movie-title{font-size:20px;line-height:28px}
+.search-results-scroll .browse-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.search-results-scroll .browse-tile{height:200px;padding:24px;font-size:24px;line-height:32px}
+.search-results-scroll .search-recent{margin-bottom:32px}
+.search-panel-loading{position:absolute;z-index:3;left:0;top:0;right:0;bottom:0;background:#000;display:flex;align-items:center;justify-content:center;pointer-events:none}
+
+#keyboard-backspace svg{fill:none}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <meta name="description" content="WePlay — фильмы, мультфильмы и сериалы на Samsung Tizen">
+  <title>WePlay</title>
+  <link rel="icon" type="image/png" href="weplay-icon.png">
+  <link data-weplay-bundled rel="stylesheet" href="style.css">
+  <link data-weplay-bundled rel="stylesheet" href="pages.css">
+  <link data-weplay-bundled rel="stylesheet" href="player.css">
+  <link data-weplay-bundled rel="stylesheet" href="loading.css">
+  <link data-weplay-bundled rel="stylesheet" href="support.css">
+  <link data-weplay-bundled rel="stylesheet" href="updates.css">
+  <link data-weplay-bundled rel="stylesheet" href="keyboard.css">
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
+
+<style>#weplay-startup{position:fixed;inset:0;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#101010;color:#eee;z-index:1000}#weplay-startup button{margin-top:32px}#weplay-startup button:focus{background:#fff;color:#111}</style>
+<script src="settings.js"></script>
+<script src="update-config.js"></script>
+<script src="update-core.js"></script>
+</head><body>
+<div id="weplay-startup" role="status" aria-label="Загрузка WePlay"><span class="activity-indicator" aria-hidden="true"><span style="transform:rotate(0deg);animation-delay:-1s"></span><span style="transform:rotate(30deg);animation-delay:-0.9166666666666666s"></span><span style="transform:rotate(60deg);animation-delay:-0.8333333333333334s"></span><span style="transform:rotate(90deg);animation-delay:-0.75s"></span><span style="transform:rotate(120deg);animation-delay:-0.6666666666666666s"></span><span style="transform:rotate(150deg);animation-delay:-0.5833333333333334s"></span><span style="transform:rotate(180deg);animation-delay:-0.5s"></span><span style="transform:rotate(210deg);animation-delay:-0.4166666666666667s"></span><span style="transform:rotate(240deg);animation-delay:-0.3333333333333333s"></span><span style="transform:rotate(270deg);animation-delay:-0.25s"></span><span style="transform:rotate(300deg);animation-delay:-0.16666666666666666s"></span><span style="transform:rotate(330deg);animation-delay:-0.08333333333333333s"></span></span></div>
+<template id="weplay-bundled-ui"><div id="stage">
+    <div id="sidebar-scrim" aria-hidden="true"></div>
+    <aside id="sidebar" aria-label="Меню WePlay">
+      <div class="brand" aria-label="WePlay"><img class="brand-logo" src="assets/weplay-mark.png" width="48" height="48" alt="" aria-hidden="true" draggable="false"><span class="brand-name">WePlay</span><time id="sidebar-clock" aria-hidden="true"></time></div>
+      <nav id="navigation" aria-label="Разделы"></nav>
+    </aside>
+    <main id="content" tabindex="-1" aria-live="polite"></main>
+    <section id="player" hidden tabindex="-1" aria-label="Видеоплеер">
+      <div id="player-surface"></div>
+      <div id="player-toolbar">
+        <button id="player-back" class="focusable" type="button" aria-label="Назад"></button>
+        <div id="player-title"></div>
+        <button id="player-retry" class="focusable" hidden>Попробовать ещё</button>
+      </div>
+      <div id="player-status" role="status"></div>
+      <div id="player-hint">OK или ↑ — управление · ← → — перемотка на 10 с · Назад — выйти</div>
+    </section>
+    <div id="exit-confirm" hidden>
+      <section class="player-confirm" role="alertdialog" aria-modal="true" aria-labelledby="exit-title" aria-describedby="exit-description">
+        <h2 id="exit-title">Завершить просмотр?</h2>
+        <p id="exit-description">Вы вернётесь к карточке фильма.</p>
+        <div class="confirm-actions">
+          <button id="exit-continue" class="primary">Продолжить просмотр</button>
+          <button id="exit-leave" class="secondary">Выйти</button>
+        </div>
+      </section>
+    </div>
+    <section id="support-modal" hidden role="dialog" aria-modal="true" aria-labelledby="support-title" aria-describedby="support-help">
+      <header class="support-header">
+        <h2 id="support-title">Поддержать WePlay</h2>
+        <button id="support-close" class="focusable support-close" type="button"><span class="icon" aria-hidden="true"></span><span class="button-label">Закрыть</span></button>
+      </header>
+      <img class="support-qr" src="assets/support-qr.png" width="820" height="820" alt="QR-код для поддержки WePlay" draggable="false">
+      <p id="support-help" class="support-help">Отсканируйте QR-код камерой телефона</p>
+    </section>
+    <div id="toast" hidden role="status"></div>
+  </div></template>
+<script>window.WEPLAY_BUNDLED_SCRIPTS=["icons.js","catalog-union.js","progress.js","series.js","seasons.js","duration.js","catalog-web.js","catalog.js","catalog-releases.js","search.js","keyboard.js","promo.js","artwork.js","vendor/hls.min.js","navigation.js","loading.js","quality.js","native-player.js","support.js","updates-ui.js","app.js"];</script>
+<script src="updater.js"></script>
+</body></html>

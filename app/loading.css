@@ -1,0 +1,14 @@
+/* A restrained, twelve-segment activity indicator. Only opacity is animated. */
+.loading-status{display:flex;align-items:center;justify-content:center;color:#e5e5e5;pointer-events:none}
+.activity-indicator{position:relative;display:block;flex-shrink:0;width:64px;height:64px;color:inherit}
+.activity-indicator>span{position:absolute;left:0;top:0;width:100%;height:100%;opacity:.2;animation:activity-pulse 1s linear infinite}
+.activity-indicator>span:before{content:'';position:absolute;left:47%;top:4%;width:6%;height:25%;border-radius:8px;background:currentColor}
+.page-loading{position:absolute;left:0;right:0;top:0;bottom:0;z-index:8;background:#101010}
+.inline-loading{width:100%;min-height:80px}
+.inline-loading .activity-indicator,button .activity-indicator{width:32px;height:32px}
+#player-loading{position:absolute;left:0;right:0;top:0;bottom:0;z-index:4;display:none;background:transparent}
+#player.native-loading #player-loading,#player.player-resolving #player-loading{display:flex;animation:activity-appear 150ms steps(1,end)}
+#player.native-loading #player-status,#player.player-resolving #player-status{visibility:hidden}
+@keyframes activity-pulse{0%{opacity:1}100%{opacity:.2}}
+@keyframes activity-appear{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.activity-indicator>span{animation-duration:2s}}

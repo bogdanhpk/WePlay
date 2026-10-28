@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+app/settings.js
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.key
+**/*.wgt
+**/credentials.json
+.env
+.env.*
+work/

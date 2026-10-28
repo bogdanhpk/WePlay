@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://local.lord-tv/samsung" version="1.22.29" viewmodes="maximized">
+  <tizen:application id="LordKim001.LordTV" package="LordKim001" required_version="5.5"/>
+  <content src="index.html"/>
+  <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+  <icon src="weplay-icon-v3.png"/>
+  <name>WePlay</name>
+  <access origin="*" subdomains="true"/>
+  <tizen:profile name="tv-samsung"/>
+  <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <tizen:content-security-policy>default-src * data: blob: 'self' 'unsafe-inline' 'unsafe-eval';</tizen:content-security-policy>
+</widget>

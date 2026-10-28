@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <meta name="description" content="WePlay — фильмы, мультфильмы и сериалы на Samsung Tizen">
+  <title>WePlay</title>
+  <link rel="icon" type="image/png" href="weplay-icon.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="pages.css">
+  <link rel="stylesheet" href="player.css">
+  <link rel="stylesheet" href="loading.css">
+  <link rel="stylesheet" href="support.css">
+  <link rel="stylesheet" href="updates.css">
+  <link rel="stylesheet" href="keyboard.css">
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+<body>
+  <div id="stage">
+    <div id="sidebar-scrim" aria-hidden="true"></div>
+    <aside id="sidebar" aria-label="Меню WePlay">
+      <div class="brand" aria-label="WePlay"><img class="brand-logo" src="assets/weplay-mark.png" width="48" height="48" alt="" aria-hidden="true" draggable="false"><span class="brand-name">WePlay</span><time id="sidebar-clock" aria-hidden="true"></time></div>
+      <nav id="navigation" aria-label="Разделы"></nav>
+    </aside>
+    <main id="content" tabindex="-1" aria-live="polite"></main>
+    <section id="player" hidden tabindex="-1" aria-label="Видеоплеер">
+      <div id="player-surface"></div>
+      <div id="player-toolbar">
+        <button id="player-back" class="focusable" type="button" aria-label="Назад"></button>
+        <div id="player-title"></div>
+        <button id="player-retry" class="focusable" hidden>Попробовать ещё</button>
+      </div>
+      <div id="player-status" role="status"></div>
+      <div id="player-hint">OK или ↑ — управление · ← → — перемотка на 10 с · Назад — выйти</div>
+    </section>
+    <div id="exit-confirm" hidden>
+      <section class="player-confirm" role="alertdialog" aria-modal="true" aria-labelledby="exit-title" aria-describedby="exit-description">
+        <h2 id="exit-title">Завершить просмотр?</h2>
+        <p id="exit-description">Вы вернётесь к карточке фильма.</p>
+        <div class="confirm-actions">
+          <button id="exit-continue" class="primary">Продолжить просмотр</button>
+          <button id="exit-leave" class="secondary">Выйти</button>
+        </div>
+      </section>
+    </div>
+    <section id="support-modal" hidden role="dialog" aria-modal="true" aria-labelledby="support-title" aria-describedby="support-help">
+      <header class="support-header">
+        <h2 id="support-title">Поддержать WePlay</h2>
+        <button id="support-close" class="focusable support-close" type="button"><span class="icon" aria-hidden="true"></span><span class="button-label">Закрыть</span></button>
+      </header>
+      <img class="support-qr" src="assets/support-qr.png" width="820" height="820" alt="QR-код для поддержки WePlay" draggable="false">
+      <p id="support-help" class="support-help">Отсканируйте QR-код камерой телефона</p>
+    </section>
+    <div id="toast" hidden role="status"></div>
+  </div>
+  <script src="settings.js"></script>
+  <script src="icons.js"></script>
+  <script src="catalog-union.js"></script>
+  <script src="progress.js"></script>
+  <script src="series.js"></script>
+  <script src="seasons.js"></script>
+  <script src="duration.js"></script>
+  <script src="catalog-web.js"></script>
+  <script src="catalog.js"></script>
+  <script src="catalog-releases.js"></script>
+  <script src="search.js"></script>
+  <script src="keyboard.js"></script>
+  <script src="promo.js"></script>
+  <script src="artwork.js"></script>
+  <script src="vendor/hls.min.js"></script>
+  <script src="navigation.js"></script>
+  <script src="loading.js"></script>
+  <script src="quality.js"></script>
+  <script src="native-player.js"></script>
+  <script src="support.js"></script>
+  <script src="updates-ui.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
