@@ -3,7 +3,7 @@
   'use strict';
   var API='https://api.themoviedb.org/3',TOKEN_KEY='weplay.tmdb.read-token.v1',pending={},pausedUntil=0;
   function token(){try{return String(window.WEPLAY_SETTINGS&&WEPLAY_SETTINGS.tmdbReadToken||localStorage.getItem(TOKEN_KEY)||'').trim();}catch(ignore){return '';}}
-  function available(){return !!token();}
+  function available(){return !!token()||!!(window.WEPLAY_TMDB_INDEX&&WEPLAY_TMDB_INDEX.entries&&WEPLAY_TMDB_INDEX.entries.length);}
   function request(path,params){
     var secret=token();if(!secret||Date.now()<pausedUntil)return Promise.reject(new Error('TMDB temporarily unavailable'));
     var url=new URL(API+path);Object.keys(params||{}).forEach(function(key){url.searchParams.set(key,String(params[key]));});
@@ -14,7 +14,14 @@
   }
   function image(path,size){return /^\/[a-zA-Z0-9]+\.(?:jpg|png|webp)$/.test(path||'')?'https://image.tmdb.org/t/p/'+size+path:'';}
   function normal(value){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(value||''));}
+  function indexed(item){
+    var index=window.WEPLAY_TMDB_INDEX;if(!index||index.schema!==1||!Array.isArray(index.entries))return null;
+    var fields=WePlayCatalogUnion.fields(item),kind=WePlayCatalogUnion.kind(item),year=(String(fields.year||'').match(/(?:19|20)\d{2}/)||[])[0]||'',ids=WePlayCatalogUnion.identifiers(item),names=[normal(item.title),normal(fields.original_title)].filter(Boolean);
+    var found=index.entries.filter(function(entry){if(entry.kind!==kind||entry.year!==year||!entry.art||!entry.art.tmdbAPI)return false;var other=entry.ids||{};if(Object.keys(ids).some(function(key){return other[key]&&other[key]!==ids[key];}))return false;return Object.keys(ids).some(function(key){return other[key]===ids[key];})||names.some(function(name){return entry.names.indexOf(name)>=0;});});
+    var unique={};found.forEach(function(entry){unique[entry.art.tmdbId]=entry;});var keys=Object.keys(unique);return keys.length===1?JSON.parse(JSON.stringify(unique[keys[0]].art)):null;
+  }
   function artwork(item){
+    var packaged=indexed(item);if(packaged)return Promise.resolve(packaged);
     var fields=WePlayCatalogUnion.fields(item),ids=WePlayCatalogUnion.identifiers(item),kind=WePlayCatalogUnion.kind(item),type=kind==='series'?'tv':kind==='movie'?'movie':'',year=(String(fields.year||'').match(/(?:19|20)\d{2}/)||[])[0]||'',names=[normal(item.title),normal(fields.original_title)].filter(Boolean),key=type+':'+(ids.tmdb||ids.imdb||names.join('|')+':'+year);
     var selectedID=null;if(!type||!ids.tmdb&&!ids.imdb&&!year)return Promise.reject(new Error('TMDB identity incomplete'));if(pending[key])return pending[key];
     function dated(record){var date=type==='tv'?record.first_air_date:record.release_date;return !year||String(date||'').slice(0,4)===year;}
@@ -32,5 +39,5 @@
       return{tmdbAPI:true,tmdbId:String(data.id),imdbId:imdb,lookupTitle:data.original_title||data.original_name||data.title||data.name,poster:image(data.poster_path,'original'),posterThumb:image(data.poster_path,'w342'),background:backgrounds[0]||'',backgrounds:backgrounds,backgroundThumb:backgrounds[0]?backgrounds[0].replace('/original/','/w1280/'):'',backgroundSource:'TMDB',backgroundCredit:page,source:'TMDB',cast:cast,castPage:page,series:type==='tv'?{seasons:data.number_of_seasons||null,status:WePlaySeries.status(data.status),at:Date.now()}:null};
     }).finally(function(){delete pending[key];});return pending[key];
   }
-  window.WePlayTMDB={available:available,artwork:artwork};
+  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed};
 }());

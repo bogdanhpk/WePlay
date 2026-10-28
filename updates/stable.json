@@ -1,4 +1,4 @@
 {
-  "signed": "{\"schema\":1,\"app\":\"LordKim001.LordTV\",\"channel\":\"stable\",\"version\":\"1.22.33\",\"sequence\":100220033,\"minShell\":1,\"createdAt\":\"2026-10-28T13:48:45.171Z\",\"payload\":{\"path\":\"releases/1.22.33/bundle.json\",\"sha256\":\"0ef7f761313cdf5ce48394e87a6a5106a7bac3865448bc710e7b205426d596b8\",\"bytes\":1707542}}",
-  "signature": "ufnOcpemWbP01uAi+nOvsSUSxQBU4ZP4sVm6SQxGeQdvXvM4H+VIrk05e0T8Dob3cl/dwxalT9wwn5DNkjuS1g=="
+  "signed": "{\"schema\":1,\"app\":\"LordKim001.LordTV\",\"channel\":\"stable\",\"version\":\"1.22.34\",\"sequence\":100220034,\"minShell\":1,\"createdAt\":\"2026-10-28T14:07:23.365Z\",\"payload\":{\"path\":\"releases/1.22.34/bundle.json\",\"sha256\":\"e3e51be1053abf338964058a8bb4e8870b36c68bff49f8409d80a29d8cc76cea\",\"bytes\":1837163}}",
+  "signature": "Fi5AerPA9hwREXhmfReUvBmVaXfUxgSg2YX8Wdgdj4wPY16JeGHq/1aHp96SLRq7y4RgoykDXZsBd9UNeT8dFQ=="
 }

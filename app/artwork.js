@@ -5,8 +5,8 @@
   var castPending={},castFailures={},metadataPending={},seriesPending={},seriesFailures={};
   var mazePending={},mazeFailures={},mazeNext=0,mazeBackoff=0,mazeShows={},mazeShowPending={},mazeShowFailures={},mazeCastPending={},mazeImageFailures={},mazeQueue=[],mazeRunning=0,mazeWake=null;
   var kpPending={},kpFailures={},kpErrors=0,kpBackoff=0,posterChecks={};
-  var MATCH_POLICY='exact-title-type-year-v1',HERO_VARIANT='tmdb-api-landscape-v3';
-  var ready={},assets={},imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[],READY_KEY='lord.artwork.ready.v2',CARD_VARIANT='tmdb-compact-v5';
+  var MATCH_POLICY='exact-title-type-year-v1',HERO_VARIANT='tmdb-index-landscape-v4';
+  var ready={},assets={},imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[],READY_KEY='lord.artwork.ready.v2',CARD_VARIANT='tmdb-index-compact-v6';
   try{ready=JSON.parse(localStorage.getItem(READY_KEY)||'{}')||{};Object.keys(ready).forEach(function(k){var role=k.split(':').pop();if(!compatibleReady(ready[k],role))delete ready[k];});localStorage.setItem(READY_KEY,JSON.stringify(ready));}catch(ignore){}
   try{cache=JSON.parse(localStorage.getItem(KEY)||'{}')||{};Object.keys(cache).forEach(function(k){if(!cache[k]||!cache[k].data||!cache[k].data.match||cache[k].data.match.policy!==MATCH_POLICY)delete cache[k];});localStorage.setItem(KEY,JSON.stringify(cache));}catch(ignore){}
   function normal(s){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(s));}
@@ -106,7 +106,7 @@
     var work=queue.shift();running++;work.run().finally(function(){running--;pump();});pump();
   }
   function get(item,priority){
-    var k=itemKey(item),stored=saved(item),useAPI=window.WePlayTMDB&&WePlayTMDB.available();if(stored&&(!useAPI||stored.data.tmdbAPI||Date.now()-(stored.data.tmdbAttemptedAt||0)<600000))return Promise.resolve(stored.data);var x=WePlayCatalogUnion.fields(item),lookup=k+'|query:'+normal(x.original_title||item.title);
+    var k=itemKey(item),stored=saved(item),useAPI=window.WePlayTMDB&&WePlayTMDB.available(),packaged=useAPI&&WePlayTMDB.indexed&&WePlayTMDB.indexed(item);if(packaged&&(!stored||!stored.data.tmdbAPI)){packaged=checked(packaged,item);if(stored&&stored.data.castSource==='TVmaze'){packaged.cast=stored.data.cast;packaged.castSource='TVmaze';}persist(k,packaged);return Promise.resolve(packaged);}if(stored&&(!useAPI||stored.data.tmdbAPI||Date.now()-(stored.data.tmdbAttemptedAt||0)<600000))return Promise.resolve(stored.data);var x=WePlayCatalogUnion.fields(item),lookup=k+'|query:'+normal(x.original_title||item.title);
     if(pending[lookup]){if(priority){var at=queue.findIndex(function(work){return work.key===lookup;});if(at>0)queue.unshift(queue.splice(at,1)[0]);}return pending[lookup];}
     if(failures[lookup]&&Date.now()-failures[lookup]<600000)return Promise.resolve(null);
     pending[lookup]=new Promise(function(resolve){var work={key:lookup,run:function(){
