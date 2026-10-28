@@ -1,1 +1,1 @@
-window.WEPLAY_SETTINGS = { apiToken: '' };
+window.WEPLAY_SETTINGS = { apiToken: '', tmdbReadToken: '' };

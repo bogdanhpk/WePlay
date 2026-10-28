@@ -5,8 +5,8 @@
   var castPending={},castFailures={},metadataPending={},seriesPending={},seriesFailures={};
   var mazePending={},mazeFailures={},mazeNext=0,mazeBackoff=0,mazeShows={},mazeShowPending={},mazeShowFailures={},mazeCastPending={},mazeImageFailures={},mazeQueue=[],mazeRunning=0,mazeWake=null;
   var kpPending={},kpFailures={},kpErrors=0,kpBackoff=0,posterChecks={};
-  var MATCH_POLICY='exact-title-type-year-v1',HERO_VARIANT='landscape-promo-v2';
-  var ready={},assets={},imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[],READY_KEY='lord.artwork.ready.v2',CARD_VARIANT='kinopoisk-first-360-v4';
+  var MATCH_POLICY='exact-title-type-year-v1',HERO_VARIANT='tmdb-api-landscape-v3';
+  var ready={},assets={},imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[],READY_KEY='lord.artwork.ready.v2',CARD_VARIANT='tmdb-compact-v5';
   try{ready=JSON.parse(localStorage.getItem(READY_KEY)||'{}')||{};Object.keys(ready).forEach(function(k){var role=k.split(':').pop();if(!compatibleReady(ready[k],role))delete ready[k];});localStorage.setItem(READY_KEY,JSON.stringify(ready));}catch(ignore){}
   try{cache=JSON.parse(localStorage.getItem(KEY)||'{}')||{};Object.keys(cache).forEach(function(k){if(!cache[k]||!cache[k].data||!cache[k].data.match||cache[k].data.match.policy!==MATCH_POLICY)delete cache[k];});localStorage.setItem(KEY,JSON.stringify(cache));}catch(ignore){}
   function normal(s){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(s));}
@@ -106,14 +106,14 @@
     var work=queue.shift();running++;work.run().finally(function(){running--;pump();});pump();
   }
   function get(item,priority){
-    var k=itemKey(item),stored=saved(item);if(stored)return Promise.resolve(stored.data);var x=WePlayCatalogUnion.fields(item),lookup=k+'|query:'+normal(x.original_title||item.title);
+    var k=itemKey(item),stored=saved(item),useAPI=window.WePlayTMDB&&WePlayTMDB.available();if(stored&&(!useAPI||stored.data.tmdbAPI||Date.now()-(stored.data.tmdbAttemptedAt||0)<600000))return Promise.resolve(stored.data);var x=WePlayCatalogUnion.fields(item),lookup=k+'|query:'+normal(x.original_title||item.title);
     if(pending[lookup]){if(priority){var at=queue.findIndex(function(work){return work.key===lookup;});if(at>0)queue.unshift(queue.splice(at,1)[0]);}return pending[lookup];}
     if(failures[lookup]&&Date.now()-failures[lookup]<600000)return Promise.resolve(null);
     pending[lookup]=new Promise(function(resolve){var work={key:lookup,run:function(){
       var fullItem=item,enriched=false;
       function details(){enriched=true;return WePlayCatalog.info(item,!x.original_title).then(function(full){fullItem=full;return full;}).catch(function(){return item;});}
-      function lookupArt(full){return tvmaze(full).then(function(primary){if(primary)return primary;return externalArt(full).then(function(extra){return tvmaze(full,extra).then(function(maze){return maze||extra;});});});}
-      return (item._source&&(!x.year||WePlayCatalogUnion.kind(item)==='series'&&!x.original_title&&!identity(item).ids.imdb)?details():Promise.resolve(item)).then(function(full){fullItem=full;return lookupArt(full).catch(function(error){
+      function lookupArt(full){function fallback(){return tvmaze(full).then(function(primary){if(primary)return primary;return externalArt(full).then(function(extra){return tvmaze(full,extra).then(function(maze){return maze||extra;});});});}return useAPI?WePlayTMDB.artwork(full).then(function(data){return checked(data,full);}).catch(function(){if(stored)return stored.data;return fallback();}).then(function(data){data.tmdbAttemptedAt=Date.now();return data;}):fallback();}
+      return (item._source&&(!x.year||!useAPI&&WePlayCatalogUnion.kind(item)==='series'&&!x.original_title&&!identity(item).ids.imdb)?details():Promise.resolve(item)).then(function(full){fullItem=full;return lookupArt(full).catch(function(error){
         if(enriched||!item._source||WePlayCatalogUnion.fields(full).original_title)throw error;
         return details().then(function(details){if(!WePlayCatalogUnion.fields(details).original_title)throw error;return lookupArt(details);});
       });}).then(function(data){persist(k,data);var fullKey=itemKey(fullItem);if(fullKey!==k)persist(fullKey,data);resolve(data);}).catch(function(){failures[lookup]=Date.now();resolve(null);}).finally(function(){delete pending[lookup];});
@@ -180,7 +180,8 @@
     var raw=unique(source.concat([cached,known])),fast={timeout:2500,priority:priority?1:0};
     function direct(list){return firstImage(unique(list.map(function(url){return candidates(url,role)[0];})),role,true,fast);}
     function relayed(list){return firstImage(unique(list.map(function(url){return candidates(url,role)[1];})),role,true,{timeout:8000,priority:0});}
-    return kinopoiskPoster(item,priority).then(function(value){return value||direct(raw);}).then(function(value){if(value)return value;
+    function tmdbCard(){if(!window.WePlayTMDB||!WePlayTMDB.available())return Promise.resolve(null);return get(item,priority).then(function(data){if(!data||!data.tmdbAPI)return null;var targets=role==='wide'?(data.backgrounds||[data.background]):[data.posterThumb||data.poster],urls=[];targets.forEach(function(url){urls=urls.concat(candidates(url,role));});return firstImage(urls,role,true,fast);});}
+    return Promise.race([tmdbCard(),new Promise(function(resolve){setTimeout(function(){resolve(null);},1500);})]).then(function(value){return value||kinopoiskPoster(item,priority);}).then(function(value){return value||direct(raw);}).then(function(value){if(value)return value;
       return (window.WePlayCatalog?WePlayCatalog.info(item,true).then(function(full){var extra=sourceImages(full,true);raw=unique(extra.concat(raw));return direct(extra);}).catch(function(){return null;}):Promise.resolve(null)).then(function(value){return value||relayed(raw);});
     }).then(function(value){if(value)return value;return get(item,priority).then(function(extra){var target=extra&&(role==='poster'?extra.poster||extra.posterThumb:extra.background||extra.backgroundThumb||extra.poster||extra.posterThumb);return target?firstImage(candidates(target,role),role,true,fast):null;});}).then(function(value){rememberAsset(key,value,role);return value;});
   }

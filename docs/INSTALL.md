@@ -160,3 +160,8 @@ tizen install -s 192.168.1.50:26101 -n WePlay.wgt -- dist
 | Кнопка новой версии не появляется | Телевизор подключён к интернету, просмотр завершён, опубликована версия новее текущей и с подходящей подписью |
 
 Официальные инструкции Samsung: [подключение телевизора](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html), [командная строка](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/command-line-interface.html), [вопросы по установке и тестированию](https://developer.samsung.com/smarttv/develop/faq/application-testing.html).
+
+
+## Обложки TMDB
+
+TMDB дополняет обложки на главной, в списках и профилях медиа. Для подключения нужен собственный API Read Access Token из [настроек TMDB](https://www.themoviedb.org/settings/api). При сборке укажите его в локальном `app/settings.js`, в поле `tmdbReadToken`. Пример без ключей: `app/settings.example.js`. Не добавляйте личный токен и `settings.js` в GitHub или публичные сборки. Без токена работают резервные источники изображений.
