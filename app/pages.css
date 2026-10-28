@@ -99,7 +99,7 @@
 .detail-topbar .detail-back{margin:0;background:rgba(31,31,31,.8);color:#fff;padding:16px 24px;border-radius:32px}
 .detail-topbar .detail-back:focus{background:#fff;color:#111}
 .detail{position:relative;display:block}
-.detail-hero{position:relative;height:880px;background:#181818;overflow:hidden}
+.detail-hero{position:relative;height:1080px;background:#181818;overflow:hidden}
 .detail-art{position:absolute;left:0;right:0;top:0;bottom:0;background:#181818}
 .detail-art img{width:100%;height:100%;display:block;object-fit:cover;object-position:50% 30%}
 .detail-scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:linear-gradient(0deg,#000 0%,rgba(0,0,0,.02) 72%),linear-gradient(90deg,rgba(0,0,0,.94) 0%,rgba(0,0,0,.66) 38%,rgba(0,0,0,.06) 80%)}
@@ -165,7 +165,7 @@
 
 .home-releases-status,.home-release-empty{font-size:18px;line-height:28px;color:#929292;margin:24px 0}
 .release-tabs{margin-bottom:32px}
-/* Keep the title's real poster readable when a verified wide background is unavailable. */
+/* The profile fills the 1920x1080 stage, including a verified poster fallback. */
 .detail-art.artwork-poster-fallback{background:#101010}
-.detail-art.artwork-poster-fallback img{position:absolute;left:auto;right:80px;top:56px;width:560px;height:752px;object-fit:contain;object-position:center}
+.detail-art.artwork-poster-fallback img{position:absolute;left:0;right:0;top:0;bottom:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%}
 .cast-credit{display:block;font-size:16px;line-height:24px;color:#a0a0a0;text-decoration:none;margin-top:8px}
