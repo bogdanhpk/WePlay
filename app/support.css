@@ -2,11 +2,10 @@
 .home-header-actions,.detail-header-actions{display:flex;align-items:center}
 .support-control{position:relative;display:inline-flex;flex-shrink:0;margin-left:16px;border-radius:999px}
 .support-control:first-child{margin-left:0}
-.support-action{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:12px 24px;border:0;border-radius:999px;background:#f5f5f5;color:#111;font-size:20px;line-height:28px;font-weight:700;white-space:nowrap}
-.support-action .icon{width:24px;height:24px;margin-right:12px}
+.support-action{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;min-height:64px;padding:16px 24px;border:0;border-radius:999px;background:#f5f5f5;color:#111;font-size:24px;line-height:32px;font-weight:700;white-space:nowrap}
+.support-action .icon{width:28px;height:28px;margin-right:12px}
 .support-action .button-label,.support-close .button-label{display:inline}
 .support-action:focus{background:#f5f5f5;color:#111}
-.detail-header-actions .support-action{min-height:64px;padding-top:16px;padding-bottom:16px}
 #support-modal{position:absolute;z-index:40;top:0;right:0;bottom:0;left:0;background:#000;color:#f5f5f5}
 .support-header{position:absolute;top:48px;right:80px;left:80px;display:flex;align-items:center;justify-content:space-between}
 #support-title{margin:0;font-size:36px;line-height:40px;font-weight:700;letter-spacing:-1px}
