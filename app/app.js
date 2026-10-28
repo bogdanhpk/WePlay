@@ -65,7 +65,6 @@
     if(poster&&!/^(https?:)?\//.test(raw))raw='/uploads/posts/'+raw;
     try {var u=new URL(raw,BASE);return /^https?:$/.test(u.protocol)?u.href:'';}catch(ignore){return '';}
   }
-  function posterUrl(item) {return absolute(xf(item,'image')||xf(item,'download_poster'),true);}
   function listOf(j) {
     var d=j.data===undefined?j:j.data;
     return Array.isArray(d)?d:(d.items||d.news||d.list||[]);
@@ -154,7 +153,7 @@
     cache['item-'+item.id]=item;
     var b=button('','movie-card',function(){push({kind:'detail',id:item.id});},'movie-'+item.id+(suffix?'-'+suffix:''));
     b.setAttribute('aria-label',text(item.title));b.setAttribute('data-content-id',item.id);var wrap=element('div','poster-wrap'),img=element('img');
-    img.alt=text(item.title);wrap.appendChild(img);WePlayArtwork.observe(img,item,!portrait,false);
+    img.alt=text(item.title);wrap.appendChild(img);WePlayArtwork.observe(img,item,portrait?'poster':'preview');
     wrap.appendChild(ratings(item,'card'));b.appendChild(wrap);
     b.appendChild(element('div','movie-title',text(item.title)));
     var progress=WePlayProgress.get(item),continuing=suffix==='home-continue'&&WePlayProgress.canResume(progress);
@@ -308,7 +307,7 @@
       var actions=element('div','actions');actions.appendChild(iconButton('Смотреть','play','primary',function(){push({kind:'detail',id:item.id,play:true});},'featured-open',true));
       var fav=iconButton(isFavorite(item.id)?'В избранном':'В избранное',isFavorite(item.id)?'check':'plus','secondary favorite-action',function(){toggleFavorite(item,fav);},'featured-favorite');fav.setAttribute('aria-label',isFavorite(item.id)?'Убрать из избранного':'В избранное');fav.setAttribute('aria-pressed',String(isFavorite(item.id)));actions.appendChild(fav);
       var info=iconButton('О фильме','info','secondary favorite-action',function(){push({kind:'detail',id:item.id});},'featured-info');info.setAttribute('aria-label','О фильме');actions.appendChild(info);body.appendChild(actions);
-      var art=element('div','featured-art'),image=element('img');image.alt='';art.appendChild(image);requestAnimationFrame(function(){WePlayArtwork.apply(image,item,true,true);});slide.appendChild(art);slide.appendChild(element('div','featured-scrim'));slide.appendChild(body);
+      var art=element('div','featured-art'),image=element('img');image.alt='';art.appendChild(image);requestAnimationFrame(function(){WePlayArtwork.attach(image,item,'backdrop');});slide.appendChild(art);slide.appendChild(element('div','featured-scrim'));slide.appendChild(body);
       if(old){slide.style.opacity='0';slide.style.transform='translateX('+(direction*8)+'px)';}
       host.insertBefore(slide,dots);position.textContent=(index+1)+' / '+items.length;paintDots();remaining=DWELL;lastTick=Date.now();paintClock();
       if(old){requestAnimationFrame(function(){requestAnimationFrame(function(){
@@ -500,8 +499,8 @@
     })).then(function(item){if(g!==generation)return item;return WePlayArtwork.prepare([item],true,true,1).then(function(){return item;});}).then(function(item){
       if(g!==generation)return;loading.remove();
       var top=element('header','detail-topbar');top.appendChild(detailIconButton('Назад','arrow-left','secondary detail-back',back,'detail-back'));var headerActions=element('div','detail-header-actions');appendUpdateControl(headerActions);headerActions.appendChild(supportControl());top.appendChild(headerActions);content.appendChild(top);
-      var wrap=element('article','detail'),hero=element('section','detail-hero'),art=element('div','detail-art'),background=element('img'),url=posterUrl(item),serial=isSeries(item);
-      background.alt='';art.appendChild(background);hero.appendChild(art);hero.appendChild(element('div','detail-scrim'));requestAnimationFrame(function(){WePlayArtwork.apply(background,item,true,true);});
+      var wrap=element('article','detail'),hero=element('section','detail-hero'),art=element('div','detail-art'),background=element('img'),serial=isSeries(item);
+      background.alt='';art.appendChild(background);hero.appendChild(art);hero.appendChild(element('div','detail-scrim'));requestAnimationFrame(function(){WePlayArtwork.attach(background,item,'backdrop');});
       var body=element('div','detail-content');body.appendChild(element('p','eyebrow',serial?'Сериал':'Фильм'));var title=element('h1','',text(item.title));title.id='detail-title';body.appendChild(title);hero.setAttribute('aria-labelledby','detail-title');
       var original=xf(item,'original_title');if(original)body.appendChild(element('p','original-title',original));
       var detailMeta=metadata(item),durationMeta=element('span','meta-part detail-duration');durationMeta.id='detail-duration';durationMeta.hidden=true;durationMeta.setAttribute('aria-live','polite');detailMeta.insertBefore(durationMeta,detailMeta.children[xf(item,'year')?1:0]||null);body.appendChild(detailMeta);body.appendChild(ratings(item,'inline'));
@@ -548,9 +547,9 @@
       function updateSeries(){var stated=WePlaySeries.fromItem(item),initial=WePlaySeries.merge(stated,WePlayArtwork.cachedSeries(item));paintSeries(initial,true);WePlayArtwork.series(item).then(function(info){if(g!==generation||!seasonsMeta.isConnected)return;paintSeries(WePlaySeries.merge(stated,info),false);});}
       [['Год выхода','year'],['Страна','strana'],['Жанр','janre'],['Режиссёр','director'],['Озвучка','postproduction'],['Качество','quality']].forEach(function(spec){var value=spec[1]==='janre'?genres(item).join(', '):text(xf(item,spec[1]));if(value){facts.appendChild(element('dt','',spec[0]));facts.appendChild(element('dd','',value));}});if(!facts.children.length)info.appendChild(element('p','rating-empty','Данные появятся позже'));else info.appendChild(facts);panels.appendChild(info);about.appendChild(panels);
       var cast=text(xf(item,'rolax')),crew=element('section','cast-section');crew.appendChild(element('h2','','В ролях'));var people=element('div','cast-list');crew.appendChild(people);about.appendChild(crew);
-      function fillCast(records){people.innerHTML='';var oldCredit=crew.querySelector('.cast-credit');if(oldCredit)oldCredit.remove();var mazeActor=records.filter(function(actor){return actor.source==='TVmaze';})[0];if(mazeActor&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(mazeActor.sourceURL||'')){var photoCredit=element('a','cast-credit','Фото: TVmaze');photoCredit.href=mazeActor.sourceURL;photoCredit.tabIndex=-1;crew.appendChild(photoCredit);}crew.hidden=!records.length;records.slice(0,12).forEach(function(actor){var person=element('div','cast-person'),avatar=element('div','cast-initials cast-avatar',actor.name.split(/\s+/).slice(0,2).map(function(part){return part[0];}).join(''));avatar.setAttribute('aria-hidden','true');if(actor.id)person.setAttribute('data-person-id',actor.id);person.appendChild(avatar);person.appendChild(element('p','',actor.name));people.appendChild(person);if(actor.image){var photo=element('img');photo.alt='';avatar.appendChild(photo);WePlayArtwork.profile(photo,actor.image);}});}
+      function fillCast(records){people.innerHTML='';var oldCredit=crew.querySelector('.cast-credit');if(oldCredit)oldCredit.remove();var mazeActor=records.filter(function(actor){return actor.source==='TVmaze';})[0];if(mazeActor&&/^https:\/\/www\.tvmaze\.com\/(?:shows|people)\/\d+$/.test(mazeActor.sourceURL||'')){var photoCredit=element('a','cast-credit','Фото: TVmaze');photoCredit.href=mazeActor.sourceURL;photoCredit.tabIndex=-1;crew.appendChild(photoCredit);}crew.hidden=!records.length;records.slice(0,12).forEach(function(actor){var person=element('div','cast-person'),avatar=element('div','cast-initials cast-avatar',actor.name.split(/\s+/).slice(0,2).map(function(part){return part[0];}).join(''));avatar.setAttribute('aria-hidden','true');if(actor.id)person.setAttribute('data-person-id',actor.id);person.appendChild(avatar);person.appendChild(element('p','',actor.name));people.appendChild(person);if(actor.image){var photo=element('img');photo.alt='';avatar.appendChild(photo);WePlayArtwork.profile(photo,actor);}});}
       var initialCast=WePlayArtwork.cachedCast(item);fillCast(initialCast.length?initialCast:cast.split(/,|;/).map(function(name){return{name:name.trim()};}).filter(function(actor){return actor.name;}));
-      WePlayArtwork.cast(item).then(function(records){if(g===generation&&crew.isConnected&&records.length&&records!==initialCast)fillCast(records);});
+      WePlayArtwork.resolve(item,{actors:true}).then(function(media){if(g===generation&&crew.isConnected&&media.actors.length&&media.actors!==initialCast)fillCast(media.actors);});
       var credits=element('section','metadata-attribution');credits.setAttribute('aria-label','Источники данных');var tmdbLogo=element('img');tmdbLogo.src=localAsset('assets/tmdb.svg');tmdbLogo.alt='TMDB';credits.appendChild(tmdbLogo);credits.appendChild(element('p','','Изображения и данные: TMDB. Дополнительные изображения сериалов: TVmaze.'));credits.appendChild(element('p','','This product uses the TMDB API but is not endorsed or certified by TMDB.'));about.appendChild(credits);
       var bottom=detailIconButton('К просмотру','arrow-left','secondary detail-return-bottom',returnToPlay,'detail-return-bottom');about.appendChild(bottom);wrap.appendChild(about);content.appendChild(wrap);detailProgressUpdate();updateDuration(null);if(serial){updateSeries();updateAvailableSeasons();}diagnostic('detailReady',item.id);
     }).catch(function(e){if(g===generation){loading.remove();errorBox(e.message,function(){navigate(current);});}});
