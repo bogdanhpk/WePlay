@@ -5,7 +5,7 @@
   var castPending={},castFailures={},metadataPending={},seriesPending={},seriesFailures={};
   var mazePending={},mazeFailures={},mazeNext=0,mazeBackoff=0,mazeShows={},mazeShowPending={},mazeShowFailures={},mazeCastPending={},mazeImageFailures={},mazeQueue=[],mazeRunning=0,mazeWake=null;
   var kpPending={},kpFailures={},kpErrors=0,kpBackoff=0,posterChecks={};
-  var MATCH_POLICY='exact-title-type-year-v1',HERO_VARIANT='verified-background-or-poster-v1';
+  var MATCH_POLICY='exact-title-type-year-v1',HERO_VARIANT='landscape-promo-v2';
   var ready={},assets={},imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[],READY_KEY='lord.artwork.ready.v2',CARD_VARIANT='kinopoisk-first-360-v4';
   try{ready=JSON.parse(localStorage.getItem(READY_KEY)||'{}')||{};Object.keys(ready).forEach(function(k){var role=k.split(':').pop();if(!compatibleReady(ready[k],role))delete ready[k];});localStorage.setItem(READY_KEY,JSON.stringify(ready));}catch(ignore){}
   try{cache=JSON.parse(localStorage.getItem(KEY)||'{}')||{};Object.keys(cache).forEach(function(k){if(!cache[k]||!cache[k].data||!cache[k].data.match||cache[k].data.match.policy!==MATCH_POLICY)delete cache[k];});localStorage.setItem(KEY,JSON.stringify(cache));}catch(ignore){}
@@ -85,7 +85,7 @@
     var key=itemKey(item),x=WePlayCatalogUnion.fields(item),lookup=key+'|'+(art&&art.imdbId||normal(x.original_title||item.title));
     if(mazePending[lookup])return mazePending[lookup];if(mazeFailures[lookup]&&Date.now()-mazeFailures[lookup]<600000)return Promise.resolve(null);
     mazePending[lookup]=mazeShow(item,art).then(function(show){
-      if(mazeImageFailures[show.id]&&Date.now()-mazeImageFailures[show.id]<600000)throw new Error('No series background');return mazeFetch('/shows/'+show.id+'/images').then(function(images){var backgrounds=(Array.isArray(images)?images:[]).filter(function(image){var size=image.resolutions&&image.resolutions.original;return image.type==='background'&&size&&size.width>=1920&&size.height>=720&&size.width/size.height>=1.4&&size.width/size.height<=2.6&&/^https:\/\/static\.tvmaze\.com\//.test(size.url||'');}).sort(function(a,b){return Number(b.main)-Number(a.main)||b.resolutions.original.width*b.resolutions.original.height-a.resolutions.original.width*a.resolutions.original.height;}).slice(0,3).map(function(image){return image.resolutions.original.url;});
+      if(mazeImageFailures[show.id]&&Date.now()-mazeImageFailures[show.id]<600000)throw new Error('No series background');return mazeFetch('/shows/'+show.id+'/images').then(function(images){var backgrounds=(Array.isArray(images)?images:[]).filter(function(image){var size=image.resolutions&&image.resolutions.original;return image.type==='background'&&size&&size.width>=1280&&size.height>=720&&size.width/size.height>=1.45&&size.width/size.height<=2.6&&/^https:\/\/static\.tvmaze\.com\//.test(size.url||'');}).sort(function(a,b){return Number(b.main)-Number(a.main)||b.resolutions.original.width*b.resolutions.original.height-a.resolutions.original.width*a.resolutions.original.height;}).slice(0,3).map(function(image){return image.resolutions.original.url;});
         if(!backgrounds.length){mazeImageFailures[show.id]=Date.now();throw new Error('No series background');}return backgrounds;
       }).then(function(backgrounds){if(!backgrounds.length)throw new Error('No series background');var old=saved(item),value=checked(Object.assign({},old&&old.data||{},art||{poster:show.image&&show.image.original||'',source:'TVmaze'},{background:backgrounds[0],backgrounds:backgrounds,backgroundSource:'TVmaze',backgroundCredit:'https://www.tvmaze.com/shows/'+show.id,imdbId:show.externals&&show.externals.imdb||'',lookupTitle:show.name}),item);persist(key,value);return value;});
     }).catch(function(){mazeFailures[lookup]=Date.now();return null;}).finally(function(){delete mazePending[lookup];});return mazePending[lookup];
@@ -120,9 +120,9 @@
     }};if(priority)queue.unshift(work);else queue.push(work);pump();});return pending[lookup];
   }
   function roleOf(wide,full){return wide?(full?'hero':'wide'):'poster';}
-  function spec(role){return role==='hero'?{width:2560,min:1920,height:720}:role==='wide'?{width:640,min:180,height:100}:role==='person'?{width:384,min:192,height:192}:{width:342,min:140,height:180};}
+  function spec(role){return role==='hero'?{width:2560,min:1280,height:720}:role==='wide'?{width:640,min:180,height:100}:role==='person'?{width:384,min:192,height:192}:{width:342,min:140,height:180};}
   function cardRole(role){return role==='wide'||role==='poster';}
-  function sufficient(value,role){var size=role==='hero'&&value&&value.posterFallback?spec('poster'):spec(role);return value&&value.width>=size.min&&value.height>=size.height;}
+  function sufficient(value,role){var size=role==='hero'&&value&&value.posterFallback?spec('poster'):spec(role);return value&&value.width>=size.min&&value.height>=size.height&&(role!=='hero'||value.posterFallback||value.width/value.height>=1.45&&value.width/value.height<=2.6);}
   function compatibleReady(value,role){return sufficient(value,role)&&(role==='hero'?value.variant===HERO_VARIANT:!cardRole(role)||value.variant===CARD_VARIANT);}
   function assetKey(item,role){return itemKey(item)+':'+role;}
   function saveReady(key,value){ready[key]=value;var keys=Object.keys(ready).sort(function(a,b){return ready[a].at-ready[b].at;});while(keys.length>320)delete ready[keys.shift()];try{localStorage.setItem(READY_KEY,JSON.stringify(ready));}catch(ignore){}}
@@ -195,9 +195,12 @@
       function select(){return firstImage(urls,'poster',true,{priority:2,timeout:1600});}
       return select().then(function(value){if(value||!window.WePlayCatalog)return value;return WePlayCatalog.info(item,true).then(function(full){urls=sourceImages(full,false);return select();}).catch(function(){return null;});}).then(function(value){return value?Object.assign({},value,{posterFallback:true}):null;});
     }
-    function resolve(){return new Promise(function(done){var remaining=2,settled=false;
-      function accept(value){if(value&&!settled){settled=true;done(value);}if(--remaining===0&&!settled)done(null);}
-      var started=false;function fallback(){if(settled||started)return;started=true;poster().then(accept,function(){accept(null);});}full().then(function(value){accept(value);if(!value)fallback();},function(){accept(null);fallback();});setTimeout(fallback,WePlayCatalogUnion.kind(item)==='series'?3200:1800);
+    function resolve(){return new Promise(function(done){var settled=false,fullFinished=false,fallbackFinished=false,fallbackValue=null,started=false,deadline;
+      function finish(value){if(settled)return;settled=true;clearTimeout(deadline);done(value);}
+      function fallback(){if(settled||started)return;started=true;poster().then(function(value){fallbackValue=value;fallbackFinished=true;if(fullFinished)finish(value);},function(){fallbackFinished=true;if(fullFinished)finish(null);});}
+      // A fast poster must not win the race against the actual landscape promo image.
+      deadline=setTimeout(function(){fullFinished=true;fallback();if(fallbackFinished)finish(fallbackValue);},12000);
+      full().then(function(value){fullFinished=true;if(value){finish(value);return;}fallback();if(fallbackFinished)finish(fallbackValue);},function(){fullFinished=true;fallback();if(fallbackFinished)finish(fallbackValue);});setTimeout(fallback,1800);
     });}
     return (pinned?loadImage(pinned.url,2,2500).then(function(value){value=Object.assign({},value,{posterFallback:!!pinned.posterFallback,credit:pinned.credit||'',creditURL:pinned.creditURL||''});return sufficient(value,'hero')?value:null;}).catch(function(){return null;}):Promise.resolve(null)).then(function(value){if(value)return value;delete ready[key];return resolve().then(function(found){rememberAsset(key,found,'hero');return found;});});
   }
