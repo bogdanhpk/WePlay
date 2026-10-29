@@ -12,7 +12,7 @@
 - Node.js 18 или новее, если вы собираете пакет из исходников.
 - Подписанный установочный файл `.wgt`.
 
-Скачайте [готовый WePlay-Tizen.wgt](https://github.com/bogdanhpk/WePlay-Tizen/releases/latest/download/WePlay-Tizen.wgt) из [последнего релиза](https://github.com/bogdanhpk/WePlay-Tizen/releases/latest). Архивы **Source code** содержат исходники, а установочный файл находится в **Assets**. Для готового `.wgt` раздел «Сборка из исходников» можно пропустить. Публичный установщик не содержит личных токенов владельца проекта.
+Скачайте [готовый WePlay-Tizen.wgt](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt). [Контрольные суммы SHA256](../downloads/SHA256SUMS.txt). Для готового `.wgt` раздел «Сборка из исходников» можно пропустить. Публичный установщик не содержит личных токенов владельца проекта.
 
 ## 1. Узнайте два IP-адреса
 

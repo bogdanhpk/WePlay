@@ -14,7 +14,14 @@ WePlay — приложение для Samsung TV с Tizen 5.5 и новее. И
 
 ## Скачать
 
-[Скачать установщик WePlay-Tizen.wgt](https://github.com/bogdanhpk/WePlay-Tizen/releases/latest/download/WePlay-Tizen.wgt) · [Контрольная сумма](https://github.com/bogdanhpk/WePlay-Tizen/releases/latest/download/SHA256SUMS.txt)
+| Платформа | Требования | Установщик | Инструкция |
+| --- | --- | --- | --- |
+| Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
+| Android TV / Google TV | Android 8.0 и новее | [Скачать APK — 1.0.0](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.0.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+
+[Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
+
+После установки WGT приложение загрузит доступное обновление интерфейса Tizen. Android TV обновляется установкой нового APK поверх предыдущей версии. Описанные ниже автоматические обновления относятся к Tizen.
 
 ## Установка на телевизор
 
