@@ -14,8 +14,6 @@ WePlay — приложение для Samsung TV с Tizen 5.5 и новее. И
 
 ## Скачать
 
-[WePlay 1.22.30 в Releases](https://github.com/bogdanhpk/WePlay-Tizen/releases/tag/v1.22.30) — описание изменений, версии и совместимость.
-
 [Скачать установщик WePlay-Tizen.wgt](https://github.com/bogdanhpk/WePlay-Tizen/releases/latest/download/WePlay-Tizen.wgt) · [Контрольная сумма](https://github.com/bogdanhpk/WePlay-Tizen/releases/latest/download/SHA256SUMS.txt)
 
 ## Установка на телевизор
