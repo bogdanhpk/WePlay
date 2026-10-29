@@ -9,7 +9,7 @@ WePlay — приложение для просмотра фильмов, сер
 | Платформа | Требования | Установщик | Инструкция |
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
-| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.0](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.0.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.1](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.1.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 
@@ -63,9 +63,13 @@ WePlay — приложение для просмотра фильмов, сер
 
 ### Android TV и Google TV
 
-В версии **1.0.0** автоматических обновлений пока нет. Устанавливайте новый APK поверх текущего приложения, чтобы сохранить историю и избранное. Не удаляйте WePlay перед обновлением: удаление очистит данные приложения.
+Начиная с **1.0.1**, WePlay проверяет новые APK в GitHub. Когда доступно обновление, рядом с «Поддержать» появляется кнопка **«Доступна новая версия»** с иконкой скачивания и цветным свечением.
 
-Android-версия использует отдельную сборку и не получает обновления из канала Tizen.
+Нажмите кнопку, затем **«Скачать и обновить»**. Приложение скачает и проверит APK, после чего откроет системное подтверждение Android. При первом обновлении разрешите WePlay устанавливать приложения и вернитесь назад. История и избранное сохраняются.
+
+Если установлена версия **1.0.0**, один раз установите APK 1.0.1 поверх неё вручную. Не удаляйте приложение перед обновлением.
+
+У Android отдельный канал обновлений; версии Tizen на него не влияют. Для владельца репозитория: [как опубликовать новый APK](docs/ANDROID_UPDATES.md).
 
 ## Совместимость и данные
 

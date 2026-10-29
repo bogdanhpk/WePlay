@@ -1,2 +1,3 @@
 e6de893141793d6ddfc39e78bc501cb748711f3b2b185684965d215ca8b8573d  WePlay-Tizen.wgt
 2a353e389bef089076448ed91f2285c8caf02a905fbee30b1154dc4adace68e5  WePlay-AndroidTV-1.0.0.apk
+1a3154c33aad8ae2ff04473ede2fdc9e130fb4bbd6e4fd30ebe5ff0842ab1a0a  WePlay-AndroidTV-1.0.1.apk

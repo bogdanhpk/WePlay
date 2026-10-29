@@ -1,0 +1,36 @@
+plugins { id 'com.android.application' }
+def releaseVersion = new Properties()
+file('../version.properties').withInputStream { releaseVersion.load(it) }
+android {
+    namespace 'app.weplay.tv'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.weplay.tv'
+        minSdk 26
+        targetSdk 35
+        versionCode = (project.findProperty('testVersionCode') ?: releaseVersion.getProperty('versionCode')).toInteger()
+        versionName = project.findProperty('testVersionName') ?: releaseVersion.getProperty('versionName')
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/bogdanhpk/WePlay/main/updates/android/stable.json"'
+    }
+    buildFeatures { buildConfig true }
+    buildTypes {
+        release { minifyEnabled false }
+        debug { applicationIdSuffix '.debug'; versionNameSuffix '-debug' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.15.0'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
+tasks.register('syncWebAssets', Exec) {
+    workingDir rootProject.projectDir
+    commandLine 'node', 'tools/sync-web.cjs'
+}
+tasks.named('preBuild').configure { dependsOn 'syncWebAssets' }

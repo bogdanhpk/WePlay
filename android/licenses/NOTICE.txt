@@ -1,0 +1,9 @@
+WePlay Android TV includes:
+
+Hls.js — Copyright Dailymotion and Hls.js contributors.
+https://github.com/video-dev/hls.js
+Apache License 2.0. See hls.js-NOTICE.txt and Apache-2.0.txt.
+
+AndroidX WebKit and AndroidX dependencies — Copyright The Android Open Source Project.
+https://developer.android.com/jetpack/androidx/releases/webkit
+Apache License 2.0. See Apache-2.0.txt.

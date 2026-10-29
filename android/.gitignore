@@ -1,0 +1,14 @@
+.gradle/
+.DS_Store
+local.properties
+**/build/
+*.jks
+*.keystore
+*.p12
+*.pass
+app/src/main/assets/weplay/
+app/src/androidTest/assets/*.apk
+app/src/androidTest/assets/*.idsig
+web-manifest.json
+BUILD-INFO.json
+VERIFICATION.json
