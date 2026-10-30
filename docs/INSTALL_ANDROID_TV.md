@@ -1,8 +1,8 @@
 # Установка WePlay на Android TV и Google TV
 
-Нужен телевизор или приставка с Android TV / Google TV 8.0 и новее и установленным Android System WebView. Версия 1.0.1 работает без компьютера; для каталогов и просмотра нужен интернет.
+Нужен телевизор или приставка с Android TV / Google TV 8.0 и новее и установленным Android System WebView. Версия 1.0.2 работает без компьютера; для каталогов и просмотра нужен интернет.
 
-[Скачать WePlay 1.0.1 — APK](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.1.apk) · [Контрольные суммы](../downloads/SHA256SUMS.txt)
+[Скачать WePlay 1.0.2 — APK](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.2.apk) · [Контрольные суммы](../downloads/SHA256SUMS.txt)
 
 ## Установка
 
@@ -31,7 +31,7 @@ APK предназначен для Android TV и Google TV. Для Samsung с T
 
 Приложение проверяет размер, SHA256, название пакета, версию и сертификат подписи APK. Загрузка отменяется кнопкой «Отмена». Отказ от установки не удаляет скачанное обновление — его можно установить позже.
 
-Для перехода с **1.0.0** один раз установите APK 1.0.1 вручную поверх текущего приложения. История и избранное сохранятся. Не удаляйте приложение перед обновлением: удаление очистит его данные.
+Для перехода с **1.0.0** один раз установите актуальный APK вручную поверх текущего приложения. История и избранное сохранятся. Не удаляйте приложение перед обновлением: удаление очистит его данные.
 
 История с Samsung автоматически не переносится. Каналы обновления Tizen и Android независимы.
 
@@ -46,6 +46,6 @@ APK предназначен для Android TV и Google TV. Для Samsung с T
 Если отладка на устройстве уже включена:
 
 ```sh
-adb install -r WePlay-AndroidTV-1.0.1.apk
+adb install -r WePlay-AndroidTV-1.0.2.apk
 adb shell am start -n app.weplay.tv/.MainActivity
 ```

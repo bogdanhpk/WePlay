@@ -1,0 +1,16 @@
+/* The floating action menu stays beside its card and inside the TV safe area. */
+#continue-menu{position:absolute;top:0;right:0;bottom:0;left:0;z-index:42;background:rgba(0,0,0,.18)}
+#continue-menu[hidden]{display:none}
+.continue-dialog{position:absolute;width:480px;max-height:984px;overflow-y:auto;padding:16px;border-radius:32px;background:#1f1f1f;box-shadow:0 16px 48px rgba(0,0,0,.64),0 0 0 1px rgba(255,255,255,.12)}
+.continue-dialog h2{margin:16px 16px 8px;font-size:24px;line-height:32px;font-weight:700;overflow-wrap:break-word}
+.continue-description{margin:0 16px 16px;font-size:20px;line-height:28px;color:#bcbcbc}
+.continue-error{margin:0 16px 16px;font-size:20px;line-height:28px;color:#fff}
+.continue-actions button{display:flex;justify-content:flex-start;width:100%;padding:16px;border-radius:16px;text-align:left}
+.continue-actions button+button{margin-top:8px}
+.continue-actions .icon{width:28px;height:28px}
+.continue-selected .poster-wrap{box-shadow:0 0 0 4px #fff}
+.continue-actions button:active{transform:scale(.96)}
+.continue-hold{position:absolute;left:16px;right:16px;bottom:12px;height:4px;border-radius:2px;background:rgba(0,0,0,.5);overflow:hidden;pointer-events:none}
+.continue-hold span{display:block;width:100%;height:100%;background:#fff;transform:scaleX(0);transform-origin:left;transition:transform 650ms linear}
+.continue-holding .continue-hold span{transform:scaleX(1)}
+@media(prefers-reduced-motion:reduce){.continue-hold span{transition:none}.continue-actions button:active{transform:none}}

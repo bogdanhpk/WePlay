@@ -22,9 +22,9 @@
   function resumable(record){return !!record&&!record.completed&&(record.pending||record.position>=1000);}
   function persist(){
     records.sort(function(a,b){return b.updatedAt-a.updatedAt;});records=records.slice(0,LIMIT);
-    try{localStorage.setItem(KEY,JSON.stringify({version:1,records:records}));}catch(ignore){
+    try{localStorage.setItem(KEY,JSON.stringify({version:1,records:records}));return true;}catch(ignore){
       // Retain the current session even when the TV's shared storage is full.
-      try{localStorage.setItem(KEY,JSON.stringify({version:1,records:records.slice(0,20)}));}catch(full){}
+      try{localStorage.setItem(KEY,JSON.stringify({version:1,records:records.slice(0,20)}));return true;}catch(full){return false;}
     }
   }
   function update(item,sample){
@@ -35,7 +35,7 @@
     if(previous)record.aliases=record.aliases.concat(previous.aliases||[]);record.aliases=record.aliases.filter(function(id,i,a){return a.indexOf(id)===i;}).slice(0,20);
     records=records.filter(function(r){return !matches(r,item);});records.unshift(record);persist();return copy(record);
   }
-  function reset(item){records=records.filter(function(r){return !matches(r,item);});persist();}
+  function reset(item){var previous=records;records=records.filter(function(r){return !matches(r,item);});if(persist())return true;records=previous;return false;}
   function list(){var out=[];records.forEach(function(r){if(resumable(r)&&!out.some(function(other){return matches(other,r.item);}))out.push(copy(r));});return out.slice(0,20);}
   function time(ms){var seconds=Math.floor(ms/1000),h=Math.floor(seconds/3600),m=Math.floor(seconds/60)%60,s=seconds%60;return(h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
   function label(record){if(!record)return'';var parts=[];if(record.season&&record.episode)parts.push('Сезон '+record.season,'Серия '+record.episode);if(record.pending)parts.push('Следующая серия');else if(record.position)parts.push(time(record.position)+(record.duration?' из '+time(record.duration):''));return parts.join(' · ');}
