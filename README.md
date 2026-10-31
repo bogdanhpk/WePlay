@@ -9,7 +9,7 @@ WePlay — приложение для просмотра фильмов, сер
 | Платформа | Требования | Установщик | Инструкция |
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
-| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.4](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.4.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.5](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.5.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 
@@ -23,6 +23,7 @@ WePlay — приложение для просмотра фильмов, сер
 - Встроенный плеер с выбором озвучки, серии, качества и субтитров, когда они доступны у источника.
 - Страницы медиа с описанием, рейтингами, длительностью, актёрами и сезонами.
 - Избранное, сохранение позиции просмотра и раздел «Продолжить просмотр». Удерживайте OK на карточке, чтобы открыть плавающее меню и убрать её со сбросом прогресса.
+- Карточка продолжения: следующая серия с пятисекундным отсчётом, следующая часть фильма — по нажатию. [Как работает](docs/POSTPLAY.md).
 - Управление пультом и подтверждение выхода из просмотра.
 
 ## Интерфейс

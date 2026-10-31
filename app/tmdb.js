@@ -39,5 +39,15 @@
       return{tmdbAPI:true,tmdbId:String(data.id),imdbId:imdb,lookupTitle:data.original_title||data.original_name||data.title||data.name,poster:image(data.poster_path,'original'),posterThumb:image(data.poster_path,'w342'),background:backgrounds[0]||'',backgrounds:backgrounds,backgroundThumb:backgrounds[0]?backgrounds[0].replace('/original/','/w1280/'):'',backgroundSource:'TMDB',backgroundCredit:page,source:'TMDB',cast:cast,castPage:page,series:type==='tv'?{seasons:data.number_of_seasons||null,status:WePlaySeries.status(data.status),at:Date.now()}:null};
     }).finally(function(){delete pending[key];});return pending[key];
   }
-  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed};
+  function nextPart(item){
+    if(!token()||WePlayCatalogUnion.kind(item)==='series')return Promise.resolve(null);
+    return artwork(item).then(function(art){return request('/movie/'+art.tmdbId,{language:'ru-RU'});}).then(function(movie){
+      if(!movie.belongs_to_collection)return null;
+      return request('/collection/'+movie.belongs_to_collection.id,{language:'ru-RU'}).then(function(collection){
+        var today=new Date().toISOString().slice(0,10),parts=(collection.parts||[]).filter(function(part){return part.media_type==='movie'&&!part.adult&&/^\d{4}-\d{2}-\d{2}$/.test(part.release_date||'')&&part.release_date<=today;}).sort(function(a,b){return a.release_date.localeCompare(b.release_date)||Number(a.id)-Number(b.id);}),at=parts.findIndex(function(part){return String(part.id)===String(movie.id);});
+        return at>=0&&parts[at+1]?parts[at+1]:null;
+      });
+    });
+  }
+  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,nextPart:nextPart};
 }());

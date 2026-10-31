@@ -35,6 +35,7 @@
   var seekBar=null,seekKnob=null,seekBubble=null,bufferFill=null,finishLabel=null,settingsButton=null,previousButton=null,nextButton=null,qualityBadge=null;
   var preview=null,seekRun=0,lastSeekKeyAt=0,menuClose=null,menuShade=null,qualityPreference=0,selectedQuality=0,bufferTimer=null,pointerCleanup=null;
   var runningEpisode=null,started=false,runningEnded=false,resumeTarget=0,lastSavedAt=0;
+  var postplay=null,postplayDismissals={},postplayAutoplay=true;
   try{audioPreference=localStorage.getItem('lord.audioPreference')||'';}catch(ignore){}
   try{qualityPreference=Number(localStorage.getItem('lord.quality.v1'))||0;}catch(ignore){}
   function put(node,value){if(node&&node.textContent!==value)node.textContent=value;}
@@ -64,6 +65,7 @@
       inner.load(wire,cfg,cb);
     };
   }
+  function followingEpisode(index){var current=episodes[index],next=episodes[index+1];if(!current||!next||!current.season||options&&options.mediaKind==='movie')return null;return Number(next.season)===Number(current.season)&&Number(next.episode)===Number(current.episode)+1||Number(next.season)===Number(current.season)+1&&Number(next.episode)===1?next:null;}
   function saveProgress(force,ended){
     if(!options||!options.onProgress||!runningEpisode||!started||runningEnded||failed)return;
     var position=currentTime;try{position=api?api.getCurrentTime():video?video.currentTime*1000:position;}catch(ignore){}
@@ -71,13 +73,18 @@
     // Early metadata/time events may still report zero before the resume seek has landed.
     if(resumeTarget>0){if(totalTime>0&&resumeTarget>=totalTime||Math.abs(position-resumeTarget)>5000)return;resumeTarget=0;}
     var now=Date.now();if(!force&&now>=lastSavedAt&&now-lastSavedAt<5000)return;
-    lastSavedAt=now;var index=episodes.indexOf(runningEpisode),next=episodes[index+1];
+    lastSavedAt=now;var index=episodes.indexOf(runningEpisode),next=followingEpisode(index);
     options.onProgress({position:position,duration:isFinite(totalTime)&&totalTime>0?totalTime:0,season:runningEpisode.season,episode:runningEpisode.episode,next:next&&{season:next.season,episode:next.episode},ended:!!ended});
   }
   function playbackStarted(){if(!started){started=true;if(options&&options.onStarted)options.onStarted();}saveProgress(false);}
-  function completed(){saveProgress(true,true);runningEnded=true;if(episodeIndex+1<episodes.length){episodeIndex++;startEpisode();}else{pause();show(true);}}
+  function completed(){if(runningEnded)return;var token=request;saveProgress(true,true);runningEnded=true;wantsPlay=false;pauseEngine();if(totalTime>0)currentTime=totalTime;tick(currentTime);if(token!==request)return;show(false);if(postplay)postplay.ended();}
+  function creditsStart(episode){
+    var ms=Number(episode.creditsStartMs||episode.credits_start_ms)||Number(episode.creditsStartSeconds||episode.credits_start_seconds)*1000;
+    return isFinite(ms)&&totalTime>0&&ms>=totalTime*.8&&ms<totalTime&&totalTime-ms<=600000?ms:0;
+  }
   function stopEngine(){
     saveProgress(true);runningEpisode=null;started=false;
+    if(postplay){postplay.destroy();postplay=null;}
     document.body.classList.remove('avplay-active');
     clearTimeout(prepareTimer);clearTimeout(bufferTimer);preview=null;if(pointerCleanup)pointerCleanup();
     if(hls){hls.destroy();hls=null;}
@@ -85,7 +92,7 @@
     if(video){video.pause();video.removeAttribute('src');video.load();video=null;}
   }
   function closeMenu(restore){if(menu)menu.remove();if(menuShade)menuShade.remove();menu=null;menuShade=null;menuClose=null;buttons=[];menuBack=null;if(settingsButton)settingsButton.setAttribute('aria-expanded','false');if(bar)bar.removeAttribute('aria-hidden');if(restore&&active)show(true);}
-  function play(){wantsPlay=true;if(suspended||preview)return;try{if(api){if(['PAUSED','READY'].indexOf(api.getState())>=0)api.play();}else if(video){var p=video.play();if(p&&p.catch)p.catch(function(e){if(e.name!=='AbortError')error(e.name==='NotAllowedError'?'Нажмите «Продолжить» для запуска видео.':'Не удалось запустить видео. Попробуйте ещё раз.');});}}catch(e){report('nativePlayError',e.message);error('Не удалось запустить видео. Попробуйте ещё раз.');}updateControls();armHide();}
+  function play(){if(runningEnded)seekTo(0);wantsPlay=true;if(suspended||preview)return;try{if(api){if(['PAUSED','READY'].indexOf(api.getState())>=0)api.play();}else if(video){var p=video.play();if(p&&p.catch)p.catch(function(e){if(e.name!=='AbortError')error(e.name==='NotAllowedError'?'Нажмите «Продолжить» для запуска видео.':'Не удалось запустить видео. Попробуйте ещё раз.');});}}catch(e){report('nativePlayError',e.message);error('Не удалось запустить видео. Попробуйте ещё раз.');}updateControls();armHide();}
   function pauseEngine(){try{if(api&&api.getState()==='PLAYING')api.pause();else if(video)video.pause();}catch(ignore){}}
   function pause(){wantsPlay=false;pauseEngine();saveProgress(true);updateControls();clearTimeout(timer);}
   function toggle(){if(wantsPlay)pause();else play();show(controlsFocused);}
@@ -117,16 +124,16 @@
     if(bufferFill)bufferFill.style.transform='scaleX('+(totalTime>0?Math.max(0,Math.min(1,buffered/totalTime)):0)+')';
     put(finishLabel,totalTime>0?'Осталось '+time(Math.max(0,totalTime-position)):'');
     if(ms>1000&&!failed&&!loading&&options.status.textContent){options.status.textContent='';report('nativeProgress',Math.round(ms));}
-    updateControls();saveProgress(false);
+    updateControls();saveProgress(false);if(postplay)postplay.update();
   }
   function controlButtons(){return bar?Array.prototype.slice.call(bar.querySelectorAll('.native-actions button')).filter(function(b){return !b.disabled&&!b.hidden&&b.offsetWidth&&b.offsetHeight;}):[];}
   function updateControls(){
     if(!bar||!episodes.length)return;var e=episodes[episodeIndex],tracks=audioOptions(),track=tracks.filter(function(t){return t.index===audioSelection();})[0];
     nowTitle.textContent=options.title||document.getElementById('player-title').textContent||'Просмотр';nowEpisode.textContent=e.season?'Сезон '+e.season+' · Серия '+e.episode:'';nowEpisode.hidden=!e.season;
-    put(stateLabel,failed?'Видео недоступно':preview?'Перемотка':suspended||!wantsPlay?'Пауза':'');stateLabel.hidden=!stateLabel.textContent;
+    put(stateLabel,failed?'Видео недоступно':preview?'Перемотка':runningEnded?'Завершено':suspended||!wantsPlay?'Пауза':'');stateLabel.hidden=!stateLabel.textContent;
     document.getElementById('player').classList.toggle('native-loading',loading&&!failed&&!suspended&&!preview);
-    toggleButton.querySelector('.control-label').textContent=wantsPlay?'Пауза':'Продолжить';toggleButton.querySelector('.icon').innerHTML=playerIcon(wantsPlay?'pause':'play');
-    toggleButton.setAttribute('aria-label',wantsPlay?'Пауза':'Продолжить');
+    toggleButton.querySelector('.control-label').textContent=runningEnded?'Сначала':wantsPlay?'Пауза':'Продолжить';toggleButton.querySelector('.icon').innerHTML=playerIcon(wantsPlay?'pause':'play');
+    toggleButton.setAttribute('aria-label',runningEnded?'Сначала':wantsPlay?'Пауза':'Продолжить');
     audioButton.querySelector('.control-caption').textContent=track?track.label:tracks.length?'Выбрать дорожку':'Нет дорожек';audioButton.disabled=!tracks.length;
     if(episodeButton)episodeButton.querySelector('.control-caption').textContent='Сезон '+e.season+' · Серия '+e.episode;
     if(previousButton)previousButton.disabled=episodeIndex===0;
@@ -212,11 +219,22 @@
   }
   function startEpisode(position,playing,focusId){
     var token=++request,e=episodes[episodeIndex];position=typeof position==='number'?position:0;stopEngine();closeMenu(false);currentTime=position;totalTime=0;failed=false;loading=true;audioIndex=0;selectedQuality=0;wantsPlay=playing!==false;
-    runningEpisode=e;runningEnded=false;resumeTarget=position;lastSavedAt=0;
+    runningEpisode=e;runningEnded=false;resumeTarget=position;lastSavedAt=0;postplayAutoplay=true;
     if(options.resolveEpisode){audioIndex=0;(e.variants||[]).some(function(v,i){if(v.label===audioPreference){audioIndex=i;return true;}return false;});}
     options.status.textContent='Загружаем видео…';options.surface.innerHTML='';
     options.hint.textContent='OK или ↑ — управление · ← → — перемотка на 10 с · Назад — выйти';
     makeBar();barSelection=focusId||'native-toggle';controlsFocused=!!focusId;show(!!focusId);if(!suspended&&!focusId)document.getElementById('player').focus();
+    var following=followingEpisode(episodeIndex),currentIndex=episodeIndex,serial=options.mediaKind==='series'||options.mediaKind!=='movie'&&!!e.season;
+    postplay=WePlayPostplay.create({root:document.getElementById('player'),icon:playerIcon,dismissed:postplayDismissals[currentIndex],
+      next:following&&serial?{kind:'episode',title:options.title||'Следующая серия',caption:'Сезон '+following.season+' · Серия '+following.episode,item:options.mediaItem}:null,
+      load:!serial&&options.nextMedia?options.nextMedia:null,
+      state:function(){return{time:currentTime,duration:totalTime,started:started,ended:runningEnded,creditsStart:creditsStart(e),playing:wantsPlay&&!loading,failed:failed,autoplay:postplayAutoplay,blocked:!active||suspended||!!menu||!!preview||document.hidden};},
+      controlsVisible:function(){return !!bar&&!bar.hidden;},
+      returnFocus:function(){if(!active)return;if(runningEnded){show(false);WePlayFocus.focus(document.getElementById('native-exit'),false);}else document.getElementById('player').focus();},
+      focusControls:function(){show(false);controlsFocused=true;WePlayFocus.focus(seekBar,false);},
+      onDismiss:function(){postplayDismissals[currentIndex]=true;},
+      onWatch:function(next){saveProgress(true,true);runningEnded=true;if(next.kind==='episode'){episodeIndex=currentIndex+1;startEpisode(0,true);report('postplayEpisode',episodeIndex);}else if(options.onNextMedia)options.onNextMedia(next.item);}
+    });
     if(options.resolveEpisode){options.resolveEpisode(e,audioIndex).then(function(stream){if(token===request)startEngine(token,e,stream,position);}).catch(function(err){if(token===request)error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');});}
     else startEngine(token,e,e.hls,position);
   }
@@ -294,9 +312,9 @@
   window.WePlayNativePlayer={
     parse:parse,
     get active(){return active;},
-    snapshot:function(){return {active:active,engine:hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:options&&options.resolveEpisode?audioIndex:hls?hls.audioTrack:audioIndex,audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack};},
+    snapshot:function(){return {active:active,engine:hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:options&&options.resolveEpisode?audioIndex:hls?hls.audioTrack:audioIndex,audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack,postplay:postplay&&postplay.snapshot()};},
     start:function(html,opts){
-      this.close();options=opts;episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
+      this.close();options=opts;postplayDismissals={};episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
       episodeIndex=opts.resume?WePlaySeasons.resumeIndex(episodes,opts.resume):opts.startSeason===undefined||opts.startSeason===null?0:WePlaySeasons.startIndex(episodes,opts.startSeason);
       if(episodeIndex<0)throw new Error(opts.resume?'Сохранённая серия недоступна в этом источнике.':'Выбранный сезон недоступен в этом источнике.');
       active=true;document.body.classList.add('native-playing');startEpisode(opts.resume?opts.resume.position:0);report('nativeResolved',episodes.length);
@@ -306,8 +324,8 @@
     restoreAfterExit:function(resume){suspended=false;if(resume&&!failed)play();else pause();updateControls();armHide();},
     key:function(k,shift,repeat){
       if(!active)return false;
-      if(k===415){if(preview)finishSeek(true,true);else play();if(!menu)show(controlsFocused);return true;}if(k===19){if(preview)finishSeek(false,false);else pause();if(!menu)show(controlsFocused);return true;}
-      if(k===10252||k===32){if(preview)finishSeek(true,true);else if(wantsPlay)pause();else play();if(!menu)show(controlsFocused);return true;}
+      if(k===415){postplayAutoplay=true;if(runningEnded&&postplay&&postplay.snapshot().visible&&postplay.snapshot().kind==='episode'){postplay.update();return true;}if(preview)finishSeek(true,true);else play();if(!menu)show(controlsFocused);return true;}if(k===19){if(runningEnded)postplayAutoplay=false;if(preview)finishSeek(false,false);else pause();if(!menu)show(controlsFocused);return true;}
+      if(k===10252||k===32){if(runningEnded&&postplay&&postplay.snapshot().visible&&postplay.snapshot().kind==='episode'){postplayAutoplay=!postplayAutoplay;postplay.update();return true;}if(preview)finishSeek(true,true);else if(wantsPlay)pause();else play();if(!menu)show(controlsFocused);return true;}
       if(k===412||k===417){if(menu)seek(k===412?-30:30);else beginSeek(k===412?-1:1,repeat,30);return true;}
       if(menu){
         if(k===10009||k===27){var callback=menuBack;closeMenu(false);if(callback)callback();return true;}
@@ -322,6 +340,7 @@
         }
         return false;
       }
+      if(postplay&&postplay.key(k,shift,repeat))return true;
       if(k===9){if(preview)finishSeek(false);show(false);var ordered=[document.getElementById('native-exit')].concat(totalTime>0?[seekBar]:[]).concat(controlButtons()),at=ordered.indexOf(document.activeElement),next=ordered[(at+(shift?-1:1)+ordered.length)%ordered.length];controlsFocused=true;WePlayFocus.focus(next);if(next&&next.tagName==='BUTTON'&&next.id!=='native-exit')barSelection=next.id;armHide();return true;}
       if(preview){
         if(k===27||k===10009){finishSeek(false);return true;}
