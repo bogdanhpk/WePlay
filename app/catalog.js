@@ -307,7 +307,7 @@
       return {ready:false,message:r.ok?'Сайт доступен, каталог пока не подключён':r.status===403?'Сайт ограничивает доступ':r.status===410||r.status===511?'Недоступен из этой сети':'Сайт ответил с ошибкой '+r.status};
     }).catch(function(){health[s.id]='unavailable';checked[s.id]=Date.now();notify();return {ready:false,message:'Сайт не ответил с телевизора'};}).finally(function(){clearTimeout(timer);});
   }
-  function searchSources(){return (mode==='auto'?sources.filter(ready):[source(mode)]).map(function(s){return s.id;});}
+  function searchSources(){return sources.filter(ready).map(function(s){return s.id;});}
   function searchKnown(){return union.combine(Object.keys(index).map(function(id){return index[id];}).filter(function(item){return item&&item.title&&searchSources().indexOf(item._source||'primary')>=0;}));}
   function searchRequest(id,query,page,options){
     options=Object.assign({deadline:Date.now()+4000},options||{});

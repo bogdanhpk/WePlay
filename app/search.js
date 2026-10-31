@@ -49,21 +49,33 @@
     options=options||{};query=clean(query);if(!normal(query))return Promise.resolve({items:[],partial:false,sources:[],failed:[]});
     var signal=options.signal,sources=WePlayCatalog.searchSources(),key=sources.join(',')+'|'+normal(query),saved=cache[key];try{aborted(signal);}catch(error){return Promise.reject(error);}
     if(saved&&!options.force&&Date.now()-saved.at<300000){if(options.onUpdate)options.onUpdate(saved.data);return Promise.resolve(saved.data);}
-    var known=WePlayCatalog.searchKnown(),pool=known.slice(),queries=plan(query,known),used={},failed={},more=[],networkCount=0,matched=[],round=0;
+    var known=WePlayCatalog.searchKnown(),pool=known.slice(),queries=plan(query,known).slice(0,3),used={},failed={},more={},sourceItems={},networkCount=0,matched=[];
     function result(pending){matched=rank(pool,query).slice(0,120);return{items:matched,query:query,pending:!!pending,partial:Object.keys(failed).length>0,sources:Object.keys(used),failed:Object.keys(failed),cached:!networkCount};}
     function update(){aborted(signal);if(options.onUpdate)options.onUpdate(result(true));}
     function request(source,value,page){
       aborted(signal);
-      var scope={signal:signal,deadline:Date.now()+4000};return WePlayCatalog.searchRequest(source,value,page,scope).then(function(j){aborted(signal);used[source]=true;if(j._saved||j.data&&j.data.partial)failed[source]=true;else{networkCount++;delete failed[source];}var d=j.data,items=Array.isArray(d)?d:d.items||d.news||[];var matches=rank(items,query).slice(0,4);if(!matches.length&&items.length){scope.aliases=true;matches=items.slice(0,6);}return WePlayCatalog.searchDetails(matches,scope).then(function(){aborted(signal);pool=pool.concat(items);var p=d.pagination;if(page===1&&p&&Number(p.pages)>1)more.push({source:source,query:value});update();});}).catch(function(e){aborted(signal);failed[source]=true;});
+      var scope={signal:signal,deadline:Date.now()+4000};return WePlayCatalog.searchRequest(source,value,page,scope).then(function(j){aborted(signal);used[source]=true;if(j._saved||j.data&&j.data.partial)failed[source]=true;else{networkCount++;delete failed[source];}var d=j.data,items=Array.isArray(d)?d:d.items||d.news||[];var matches=rank(items,query).slice(0,4);if(!matches.length&&items.length){scope.aliases=true;matches=items.slice(0,6);}return WePlayCatalog.searchDetails(matches,scope).then(function(){
+        aborted(signal);pool=pool.concat(items);var own=[];
+        // Ranking combines records globally. A source may finish its own query variants
+        // only after a match from that source, rather than another catalog's exact hit.
+        items.forEach(function(item){WePlayCatalogUnion.variants(item).forEach(function(record){if((record._source||source)===source)own.push(record);});});
+        sourceItems[source]=(sourceItems[source]||[]).concat(own);
+        var p=d.pagination;if(page===1&&p&&Number(p.pages)>1)(more[source]||(more[source]=[])).push({query:value,matches:own.filter(function(item){return !!match(item,query);}).length});
+        update();return true;
+      });}).catch(function(e){aborted(signal);failed[source]=true;return false;});
     }
-    function next(){
-      aborted(signal);var value=queries[round++];if(!value||round>3)return Promise.resolve();
-      return Promise.all(sources.filter(function(source){return !failed[source]||used[source];}).map(function(source){return request(source,value,1);})).then(function(){
-        aborted(signal);if(!Object.keys(used).length)return;matched=rank(pool,query);var strong=matched.some(function(item){var m=match(item,query);return m&&m.tier>=4;});if(!strong&&round<3)return next();
+    function next(source,round){
+      aborted(signal);var value=queries[round];if(!value)return Promise.resolve();
+      return request(source,value,1).then(function(ok){
+        aborted(signal);if(!ok&&!used[source])return;
+        var strong=(sourceItems[source]||[]).some(function(item){var m=match(item,query);return m&&m.tier>=4;});
+        if(!strong)return next(source,round+1);
       });
     }
-    update();return next().then(function(){
-      aborted(signal);var first=rank(pool,query),jobs=more.slice(0,3);if(first.length<24&&jobs.length)return Promise.all(jobs.map(function(job){return request(job.source,job.query,2);}));
+    update();return Promise.all(sources.map(function(source){return next(source,0);})).then(function(){
+      // Give every responsive source its own next-page slot, even when a faster
+      // catalog already filled the results. Keep work bounded on older televisions.
+      aborted(signal);return Promise.all(sources.map(function(source){var jobs=more[source]||[];jobs.sort(function(a,b){return b.matches-a.matches;});if(jobs.length)return request(source,jobs[0].query,2);}));
     }).then(function(){aborted(signal);var top=rank(pool,query).slice(0,30);return WePlayCatalog.searchDetails(top,{signal:signal,deadline:Date.now()+4000});}).then(function(){
       aborted(signal);pool=pool.concat(WePlayCatalog.searchKnown());var final=result(false);
       if(!final.partial&&final.sources.length){cache[key]={at:Date.now(),data:final};var keys=Object.keys(cache).sort(function(a,b){return cache[a].at-cache[b].at;});while(keys.length>12)delete cache[keys.shift()];}
