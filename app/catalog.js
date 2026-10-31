@@ -21,7 +21,14 @@
   function list(root,selector){return Array.prototype.slice.call(root.querySelectorAll(selector));}
   function url(raw,base){try{var u=new URL(raw,base);return /^https?:$/.test(u.protocol)?u.href:'';}catch(ignore){return '';}}
   function catalogImage(node,base){if(!node)return'';var found='';['data-src','data-original','data-lazy-src','src','content'].some(function(key){var raw=node.getAttribute(key);if(!raw||/^(?:data|blob):/i.test(raw)||/(?:no[-_]?(?:image|poster|photo)|placeholder|spacer|blank|loading)[^/]*\.(?:gif|png|jpg|webp)/i.test(raw))return false;found=url(raw,base);return !!found;});return found;}
-  function pageURL(raw,s){var u=url(raw,s.base);return u&&new URL(u).hostname===new URL(s.base).hostname?u:'';}
+  function pageURL(raw,s){
+    var rawURL=url(raw,s.base);if(!rawURL)return'';var candidate=new URL(rawURL),base=new URL(s.base);
+    if(candidate.hostname===base.hostname)return rawURL;
+    // This source rotates numbered mirrors. Keep its stable source ID and fetch through
+    // the configured origin, which redirects to the current mirror. Other hosts stay excluded.
+    if(s.layout==='media'&&/^lordfilm26-kino\d+\.lat$/.test(base.hostname)&&/^lordfilm26-kino\d+\.lat$/.test(candidate.hostname)&&/^\/\d+\/?$/.test(candidate.pathname)&&!candidate.username&&!candidate.password&&!candidate.port)return new URL(candidate.pathname,s.base).href;
+    return'';
+  }
   function remember(item){if(item&&item.id){if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives)item._alternatives.forEach(remember);else index[String(item.id)]=item;if(item._categoryURL)paths[String(item.id)]=item._categoryURL;if(item.title)union.combine([item]);}}
   function register(j){var d=j&&j.data;if(Array.isArray(d))d.forEach(remember);else if(d&&Array.isArray(d.items))d.items.forEach(remember);else if(d&&d.id)remember(d);return j;}
   Object.keys(stored).forEach(function(k){register(stored[k].data);});
@@ -73,7 +80,7 @@
   }
   function listing(s,params,options){
     var page=Number(params.page)||1,path=categoryPath(s,params.category),target;
-    if(params.search){var q=new URLSearchParams({do:'search',subaction:'search',story:String(params.search)});if(page>1){q.set('search_start',String(page));if(s.id==='sb')q.set('result_from',String((page-1)*30+1));}target=s.base+'index.php?'+q.toString();}
+    if(params.search){var q=new URLSearchParams({do:'search',subaction:'search',story:String(params.search)});if(s.layout!=='media'&&(!options||options.titleOnly!==false)){q.set('titleonly','3');q.set('full_search','1');}if(page>1){q.set('search_start',String(page));if(s.id==='sb')q.set('result_from',String((page-1)*30+1));}target=s.base+'index.php?'+q.toString();}
     else{target=url(path,s.base);if(page>1){if(/\.html$/.test(target))throw new Error('Все фильмы этой подборки уже загружены.');target=target.replace(/\/$/,'')+'/page/'+page+'/';}}
     return documentAt(target,s,null,options).then(function(doc){
       var rows=s.layout==='media'?WePlayWebCatalog.listing(doc,s,params,webHelpers(options)):Promise.resolve(cards(doc,s,Number(params.category)===219&&!params.search));return rows.then(function(items){var pages=page;
@@ -304,9 +311,14 @@
   function searchKnown(){return union.combine(Object.keys(index).map(function(id){return index[id];}).filter(function(item){return item&&item.title&&searchSources().indexOf(item._source||'primary')>=0;}));}
   function searchRequest(id,query,page,options){
     options=Object.assign({deadline:Date.now()+4000},options||{});
-    var s=source(id),revision=epoch,params={action:'news',do:'list',page:page||1,limit:60,approve:1,search:query},k='search2|'+id+'|'+key(params);
+    var s=source(id),revision=epoch,params={action:'news',do:'list',page:page||1,limit:60,approve:1,search:query},k='search3|'+id+'|'+key(params);
     if(searchSources().indexOf(id)<0)return Promise.reject(new Error('Источник изменён.'));
-    return Promise.resolve().then(function(){return id==='primary'?original(params,options):listing(s,params,options);}).then(function(j){
+    return Promise.resolve().then(function(){return id==='primary'?original(params,options):listing(s,params,options).then(function(j){
+      // Original-language titles may exist only in metadata. Retain that discovery path
+      // when a provider's title-only search is empty, within the same request deadline.
+      if(s.layout!=='media'&&options.titleOnly!==false&&!itemsOf(j).length&&Date.now()+250<options.deadline)return listing(s,params,Object.assign({},options,{titleOnly:false}));
+      return j;
+    });}).then(function(j){
       if(revision!==epoch||options.signal&&options.signal.aborted)throw Object.assign(new Error('Поиск отменён'),{name:'AbortError'});
       itemsOf(j).forEach(function(item){item._source=id;remember(item);});persist(k,j);return j;
     }).catch(function(error){if(revision!==epoch||options.signal&&options.signal.aborted)throw Object.assign(new Error('Поиск отменён'),{name:'AbortError'});var saved=stored[k];if(saved&&Date.now()-saved.at<86400000)return Object.assign({},register(saved.data),{_saved:true});throw error;});
