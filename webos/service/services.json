@@ -1,0 +1,10 @@
+{
+  "id": "app.weplay.tv.network",
+  "services": [
+    {
+      "name": "app.weplay.tv.network",
+      "description": "WePlay catalog and playback transport",
+      "commands": [{"name": "connect", "public": false}]
+    }
+  ]
+}

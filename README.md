@@ -1,19 +1,20 @@
 # WePlay
 
-WePlay — приложение для просмотра фильмов, сериалов и мультфильмов на **Samsung Tizen, Android TV и Google TV**. Интерфейс рассчитан на пульт, а видео воспроизводится внутри приложения.
+WePlay — приложение для просмотра фильмов, сериалов и мультфильмов на **Samsung Tizen, LG webOS, Android TV и Google TV**. Интерфейс рассчитан на пульт, а видео воспроизводится внутри приложения.
 
-Для каталогов и просмотра нужен интернет. После установки обе версии работают без включённого компьютера.
+Для каталогов и просмотра нужен интернет. После установки WePlay работает без включённого компьютера.
 
 ## Скачать
 
 | Платформа | Требования | Установщик | Инструкция |
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
+| LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.0](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.0_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
 | Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.5](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.5.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 
-Для Samsung с Tizen используйте WGT, для Android TV и Google TV — APK. У этих версий разные способы установки и обновления.
+Для Samsung Tizen скачайте WGT, для LG webOS — IPK, для Android TV и Google TV — APK.
 
 ## Возможности
 
@@ -52,6 +53,10 @@ WePlay — приложение для просмотра фильмов, сер
 
 Подробнее, включая установку через ADB: [инструкция для Android TV](docs/INSTALL_ANDROID_TV.md).
 
+### LG webOS
+
+Включите Developer Mode на телевизоре и установите IPK с компьютера через webOS CLI. [Инструкция для LG](docs/INSTALL_WEBOS.md).
+
 ## Обновления
 
 ### Samsung Tizen
@@ -72,9 +77,13 @@ WePlay — приложение для просмотра фильмов, сер
 
 У Android отдельный канал обновлений; версии Tizen на него не влияют. Для владельца репозитория: [как опубликовать новый APK](docs/ANDROID_UPDATES.md).
 
+### LG webOS
+
+Скачайте новый IPK и установите его поверх текущей версии по [инструкции для LG](docs/INSTALL_WEBOS.md).
+
 ## Совместимость и данные
 
-Версия для Tizen проверена на Samsung Q60T 2020 года с Tizen 5.5. Android-версия проверена в эмуляторе Android TV 12; проверка на физическом Android TV пока не выполнена.
+Версия для Tizen проверена на Samsung Q60T 2020 года с Tizen 5.5. Android-версия проверена в эмуляторе Android TV 12; проверка на физическом Android TV пока не выполнена. Для webOS загрузка каталога, навигация и тестовое воспроизведение HLS и MP4 проверены в Chromium. Проверка на телевизоре LG ещё предстоит.
 
 Доступность видео, озвучек, серий, качества и субтитров зависит от источника. Поддержка кодеков зависит от устройства; на Android TV — также от версии Android System WebView.
 
