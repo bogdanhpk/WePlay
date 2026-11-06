@@ -1,7 +1,7 @@
 /* Authenticated metadata goes directly to TMDB; credentials never enter image URLs. */
 (function(){
   'use strict';
-  var API='https://api.themoviedb.org/3',TOKEN_KEY='weplay.tmdb.read-token.v1',pending={},pausedUntil=0;
+  var API='https://api.themoviedb.org/3',TOKEN_KEY='weplay.tmdb.read-token.v1',pending={},pausedUntil=0,collectionLookup;
   function token(){try{return String(window.WEPLAY_SETTINGS&&WEPLAY_SETTINGS.tmdbReadToken||localStorage.getItem(TOKEN_KEY)||'').trim();}catch(ignore){return '';}}
   function available(){return !!token()||!!(window.WEPLAY_TMDB_INDEX&&WEPLAY_TMDB_INDEX.entries&&WEPLAY_TMDB_INDEX.entries.length);}
   function request(path,params){
@@ -14,6 +14,32 @@
   }
   function image(path,size){return /^\/[a-zA-Z0-9]+\.(?:jpg|png|webp)$/.test(path||'')?'https://image.tmdb.org/t/p/'+size+path:'';}
   function normal(value){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(value||''));}
+  function collectionBackdrop(item){
+    var index=window.WEPLAY_COLLECTIONS,kind=WePlayCatalogUnion.kind(item);
+    if(!index||index.schema!==1||kind==='series')return '';
+    var fields=WePlayCatalogUnion.fields(item),year=(String(fields.year||'').match(/(?:19|20)\d{2}/)||[])[0];
+    var id=WePlayCatalogUnion.identifiers(item).tmdb;
+    if(!id&&(kind!=='movie'||!year))return '';
+    if(!collectionLookup){
+      collectionLookup={ids:Object.create(null),names:Object.create(null)};
+      index.collections.forEach(function(collection){collection.parts.forEach(function(part){
+        var partYear=part.release_date.slice(0,4);
+        collectionLookup.ids[part.id]=part;
+        [part.title,part.original_title].concat(part.aliases||[]).map(normal).filter(Boolean).forEach(function(name){
+          var key=partYear+'|'+name,parts=collectionLookup.names[key]||(collectionLookup.names[key]=Object.create(null));
+          parts[part.id]=part;
+        });
+      });});
+    }
+    if(id){
+      var part=collectionLookup.ids[id];
+      return part&&(!year||part.release_date.slice(0,4)===year)?image(part.backdrop,'original'):'';
+    }
+    var matches=Object.create(null);
+    [item.title,fields.original_title].map(normal).filter(Boolean).forEach(function(name){Object.assign(matches,collectionLookup.names[year+'|'+name]);});
+    var keys=Object.keys(matches);
+    return keys.length===1?image(matches[keys[0]].backdrop,'original'):'';
+  }
   function indexed(item){
     var index=window.WEPLAY_TMDB_INDEX;if(!index||index.schema!==1||!Array.isArray(index.entries))return null;
     var fields=WePlayCatalogUnion.fields(item),kind=WePlayCatalogUnion.kind(item),year=(String(fields.year||'').match(/(?:19|20)\d{2}/)||[])[0]||'',ids=WePlayCatalogUnion.identifiers(item),names=[normal(item.title),normal(fields.original_title)].filter(Boolean);
@@ -49,5 +75,5 @@
       });
     });
   }
-  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,nextPart:nextPart};
+  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,collectionBackdrop:collectionBackdrop,nextPart:nextPart};
 }());

@@ -101,6 +101,7 @@
 .detail{position:relative;display:block}
 .detail-hero{position:relative;height:880px;background:#181818;overflow:hidden}
 .detail-art{position:absolute;left:0;right:0;top:0;bottom:0;background:#000}
+.detail-art:not(.artwork-backdrop-ready){background:radial-gradient(ellipse at 76% 32%,#252d39 0%,#101419 54%,#000 87%)}
 .detail-art img{width:100%;height:100%;display:block;object-fit:contain;object-position:right top}
 .detail-scrim{position:absolute;left:0;right:0;top:0;bottom:0;background:linear-gradient(0deg,#000 0%,rgba(0,0,0,.02) 72%),linear-gradient(90deg,#000 18%,rgba(0,0,0,.66) 38%,rgba(0,0,0,.06) 80%)}
 .detail-content{position:absolute;z-index:2;left:80px;bottom:80px;max-width:1040px;padding:0;margin:0}
@@ -165,8 +166,6 @@
 
 .home-releases-status,.home-release-empty{font-size:18px;line-height:28px;color:#929292;margin:24px 0}
 .release-tabs{margin-bottom:32px}
-/* Position a portrait poster on the right while the backdrop loads. */
-.detail-art.artwork-poster-fallback img{object-fit:contain;object-position:85% 50%;opacity:.85}
 .cast-credit{display:block;font-size:16px;line-height:24px;color:#a0a0a0;text-decoration:none;margin-top:8px}
 .metadata-attribution{margin-top:48px;color:#929292;font-size:16px;line-height:24px;max-width:1120px}
 .metadata-attribution img{display:block;width:128px;height:24px;object-fit:contain;object-position:left center;margin-bottom:16px}

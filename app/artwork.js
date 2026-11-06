@@ -49,8 +49,8 @@
       }).catch(function(error){if(identity(item).ids.imdb)throw error;return{poster:found.poster,posterThumb:found.thumb,source:'TMDB'};});
     }).then(function(data){return checked(data,item);});
   }
-  function cinemeta(item){
-    var x=WePlayCatalogUnion.fields(item),want=identity(item),query=WePlayWebCatalog.cleanTitle(x.original_title||item.title),kind=want.kind==='series'?'series':'movie',imdb=want.ids.imdb;
+  function cinemeta(item,known){
+    var x=WePlayCatalogUnion.fields(item),want=identity(item),query=WePlayWebCatalog.cleanTitle(x.original_title||known&&known.lookupTitle||item.title),kind=want.kind==='series'?'series':'movie',imdb=want.ids.imdb||known&&known.imdbId;
     if(!want.kind||!want.year&&!imdb)return Promise.reject(new Error('Artwork identity incomplete'));
     var url='https://v3-cinemeta.strem.io/'+(imdb?'meta/'+kind+'/'+imdb+'.json':'catalog/'+kind+'/top/search='+encodeURIComponent(query)+'.json');
     return fetchValue(url,true).then(function(j){
@@ -59,7 +59,8 @@
       if(matches.length!==1)throw new Error('No unambiguous artwork match');var m=matches[0],poster=m.poster||'';
       if(/^https:\/\/m\.media-amazon\.com\//.test(poster))poster=poster.replace(/\._V1[^/]*\.(jpg|png)$/,'._V1_SX1500.$1');
       else poster='https://images.metahub.space/poster/large/'+m.id+'/img';
-      return checked({imdbId:m.id,lookupTitle:m.name,poster:poster,posterThumb:poster.replace('_SX1500.','_SX500.'),background:'https://images.metahub.space/background/large/'+m.id+'/img',backgroundThumb:'https://images.metahub.space/background/medium/'+m.id+'/img',source:'Cinemeta'},item);
+      var metahub='https://images.metahub.space/background/large/'+m.id+'/img';
+      return checked({imdbId:m.id,lookupTitle:m.name,poster:poster,posterThumb:poster.replace('_SX1500.','_SX500.'),background:metahub,backgrounds:uniqueImages([m.background,metahub]),backgroundThumb:'https://images.metahub.space/background/medium/'+m.id+'/img',source:'Cinemeta'},item);
     });
   }
   function pumpMaze(){
@@ -184,7 +185,8 @@
     return record;
   }
   function normalizedImages(item,data){
-    data=data||{};var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((data.backgrounds||[]).concat([data.background,data.backgroundThumb],sourceImages(item,false,['background','backdrop','background_url','backdrop_url','fanart'])));
+    data=data||{};var indexed=window.WePlayTMDB&&WePlayTMDB.collectionBackdrop&&WePlayTMDB.collectionBackdrop(item);
+    var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((data.backgrounds||[]).concat([data.background,data.backgroundThumb,indexed],sourceImages(item,false,['background','backdrop','background_url','backdrop_url','fanart'])));
     return{landscapes:landscapes,posters:posters,original:landscapes[0]||posters[0]||'',preview:landscapes[0]?candidates(landscapes[0],'wide')[0]:posters[0]?candidates(posters[0],'wide')[0]:'',poster:posters[0]?candidates(posters[0],'poster')[0]:'',source:data.backgroundSource||data.source||'catalog',creditURL:data.backgroundCredit||data.castPage||''};
   }
   function resourceFor(item,priority){
@@ -268,6 +270,16 @@
       return selectPoster(entry).then(function(selection){
         return selection&&!selection.posterFallback?landscape([selection.sourceURL]):null;
       });
+    }).then(function(value){
+      if(value||!entry.item._detail||entry.metadata&&entry.metadata.source==='Cinemeta')return value;
+      if(!entry.alternateBackdropTask)entry.alternateBackdropTask=metadataTask('backdrop:'+entry.key,function(){return cinemeta(entry.item,entry.metadata);}).catch(function(){return null;});
+      return entry.alternateBackdropTask.then(function(data){return data?landscape(data.backgrounds):null;});
+    }).then(function(value){
+      if(value||!entry.item._detail)return value;
+      return selectPoster(entry).then(function(poster){
+        var catalog=uniqueImages(sourceImages(entry.item,false));
+        return landscape(catalog.filter(function(url){return !poster||url!==poster.sourceURL;}));
+      });
     });
   }
   function resourceAsset(entry,role){
@@ -295,13 +307,13 @@
   function commit(img,value){
     if(!img.isConnected||img._weplayRetired||img._weplayCommitted&&!img._weplayCommitted.posterFallback)return;if(!value){if(!img._weplayCommitted)unavailable(img);return;}
     var previous=img._weplayCommitted;img._weplayCommitted=value;
-    function reveal(){if(!img.isConnected||img._weplayRetired||img._weplayCommitted!==value)return;img.setAttribute('data-artwork-resolution',value.width+'x'+value.height);img.parentNode.classList.toggle('artwork-poster-fallback',!!value.posterFallback);img.style.visibility='visible';img.setAttribute('data-artwork-ready','true');var parent=img.parentNode;parent.classList.remove('artwork-loading');parent.classList.remove('unavailable');parent.removeAttribute('aria-busy');if(img._weplayArt&&img._weplayArt.role==='hero'&&value.credit==='TVmaze'&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(value.creditURL||'')&&!parent.querySelector('.artwork-credit')){var credit=document.createElement('a');credit.className='artwork-credit';credit.textContent='Изображение: TVmaze';credit.href=value.creditURL;credit.tabIndex=-1;parent.appendChild(credit);}}
+    function reveal(){if(!img.isConnected||img._weplayRetired||img._weplayCommitted!==value)return;img.setAttribute('data-artwork-resolution',value.width+'x'+value.height);img.parentNode.classList.toggle('artwork-poster-fallback',!!value.posterFallback);img.style.visibility='visible';img.setAttribute('data-artwork-ready','true');var parent=img.parentNode;parent.classList.remove('artwork-loading');parent.classList.remove('unavailable');parent.removeAttribute('aria-busy');if(img._weplayArt&&img._weplayArt.landscapeOnly)parent.classList.add('artwork-backdrop-ready');if(img._weplayArt&&img._weplayArt.role==='hero'&&value.credit==='TVmaze'&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(value.creditURL||'')&&!parent.querySelector('.artwork-credit')){var credit=document.createElement('a');credit.className='artwork-credit';credit.textContent='Изображение: TVmaze';credit.href=value.creditURL;credit.tabIndex=-1;parent.appendChild(credit);}}
     function failed(){if(img._weplayCommitted!==value||img._weplayRetired)return;img._weplayCommitted=null;if(previous)commit(img,previous);else unavailable(img);}function loaded(){validPoster(value.url,img).then(function(valid){if(!valid){failed();return;}if(img.decode)img.decode().then(reveal,failed);else reveal();});}img.onload=loaded;img.onerror=failed;img.src=value.url;if(img.complete&&img.naturalWidth)loaded();
   }
   function start(img){var config=img._weplayArt;if(!config||img._weplayRetired||img._weplayStarted||img._weplayCommitted||!img.isConnected)return;img._weplayStarted=true;var rect=img.getBoundingClientRect(),visible=rect.top<innerHeight&&rect.bottom>0&&rect.left<innerWidth&&rect.right>0;var entry=resourceFor(config.item,config.role==='hero'||visible);
     if(config.role!=='hero'){resourceAsset(entry,config.role).then(function(value){commit(img,value);});return;}
     var hero=resourceAsset(entry,'hero');
-    var fallback=resourceAsset(entry,'poster').then(function(value){
+    var fallback=config.landscapeOnly?Promise.resolve():resourceAsset(entry,'poster').then(function(value){
       if(value&&!img._weplayCommitted)commit(img,Object.assign({},value,{posterFallback:true}));
     });
     hero.then(function(value){
@@ -314,7 +326,7 @@
     });}
   var observer=typeof IntersectionObserver!=='undefined'?new IntersectionObserver(function(entries){entries.forEach(function(entry){if(entry.isIntersecting){observer.unobserve(entry.target);start(entry.target);}});},{root:document.getElementById('content'),rootMargin:'320px 160px'}):null;
   function bind(img,item,wide,full,eager){
-    if(img._weplayArt)return;img.style.visibility='hidden';img._weplayArt={item:item,role:typeof wide==='string'?({backdrop:'hero',preview:'wide',poster:'poster'}[wide]||wide):roleOf(wide,full)};img.setAttribute('data-artwork-key',itemKey(item));if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
+    if(img._weplayArt)return;img.style.visibility='hidden';img._weplayArt={item:item,role:typeof wide==='string'?({backdrop:'hero','profile-backdrop':'hero',preview:'wide',poster:'poster'}[wide]||wide):roleOf(wide,full),landscapeOnly:wide==='profile-backdrop'};img.setAttribute('data-artwork-key',itemKey(item));if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
     if(eager||!observer){if(img.isConnected)start(img);else requestAnimationFrame(function(){start(img);});}else observer.observe(img);
   }
   function prefetch(items,wide,full,count){return Promise.all((items||[]).slice(0,count||items.length).map(function(item){return asset(item,roleOf(wide,full),!!full);}));}
