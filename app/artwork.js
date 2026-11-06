@@ -129,11 +129,12 @@
   function sufficient(value,role){var size=spec(role);return value&&value.width>=size.min&&value.height>=size.height&&(!landscapeRole(role)||isLandscape(value));}
   function originalAssetURL(raw){try{var url=new URL(raw);return url.hostname==='wsrv.nl'&&url.searchParams.get('url')||raw;}catch(ignore){return raw;}}
   function candidates(raw,role){
-    if(!raw)return[];var size=spec(role),compact=cardRole(role),target=imageURL(raw,role==='person'?'h632':role==='hero'?'original':role==='wide'?'w780':'w342')||raw;
+    if(!raw)return[];var size=spec(role),compact=cardRole(role),sized=imageURL(raw,role==='person'?'h632':role==='hero'?'original':role==='wide'?'w780':'w342'),target=sized||raw;
     if(compact&&/^https:\/\/m\.media-amazon\.com\//.test(target))target=target.replace(/_SX\d+\./,'_SX'+size.width+'.');
     if(compact&&/^https:\/\/st\.kp\.yandex\.net\/images\/(?:film_big\/|film_iphone\/iphone\d+_)\d+\.jpg$/.test(target))target=target.replace(/\/(?:film_big\/|film_iphone\/iphone\d+_)(\d+)\.jpg$/,'/film_iphone/iphone360_$1.jpg');
     var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
-    return isTV&&remote?[relay,target]:[target,relay];
+    var compactPublicFrame=role==='wide'&&!sized&&/^https?:\/\/[^/?#@\s]+\/[^?#\s]+$/.test(target);
+    return isTV&&remote||compactPublicFrame?[relay,target]:[target,relay];
   }
   function pumpImages(){
     if(!imageQueue.length||imageRunning>=3)return;
@@ -197,9 +198,9 @@
     var entry=resources.filter(function(record){return sameResource(record,item);})[0],wanted=identity(item);
     if(entry){
       wanted.names.forEach(function(name){if(entry.identity.names.indexOf(name)<0)entry.identity.names.push(name);});Object.assign(entry.identity.ids,wanted.ids);entry.identity.kind=entry.identity.kind||wanted.kind;entry.identity.year=entry.identity.year||wanted.year;
-      if(item._detail&&item!==entry.item){
+      if(item!==entry.item){
         var landscapeCount=entry.images.landscapes.length;
-        entry.item=item;
+        if(item._detail)entry.item=item;
         mergeImages(entry,normalizedImages(item,entry.metadata));
         if(entry.images.landscapes.length>landscapeCount&&entry.retryAt){delete entry.retryAt.hero;delete entry.retryAt.wide;}
       }
@@ -224,7 +225,9 @@
     }
     entry.images=images;
   }
-  function rememberFamily(entry,sourceURL){
+  function rememberFamily(entry,sourceURL,role){
+    entry.coverFamily=sourceURL;
+    if(role==='hero'&&entry.retryAt)delete entry.retryAt.wide;
     var previous=families[entry.key];if(previous&&!previous.posterFallback&&previous.sourceURL===sourceURL)return;
     families[entry.key]={identity:entry.identity,sourceURL:sourceURL,at:Date.now()};var keys=Object.keys(families).sort(function(a,b){return families[a].at-families[b].at;});while(keys.length>160)delete families[keys.shift()];try{localStorage.setItem(FAMILY_KEY,JSON.stringify(families));}catch(ignore){}
   }
@@ -276,6 +279,11 @@
         if(hero&&value.width>=960&&isLandscape(value)&&(!fallback||fallback.value.width<value.width))fallback=selected(value);
       }}).then(function(value){return value?selected(value):null;});
     }
+    function shared(){
+      var stored=families[entry.key],source=entry.coverFamily;
+      if(!source&&stored&&stored.identity&&!stored.posterFallback&&sameResource(stored,entry.item))source=stored.sourceURL;
+      return landscape(uniqueImages([source]),'catalog');
+    }
     function listed(){return landscape(entry.images.landscapes,entry.images.source,entry.images.creditURL);}
     function catalog(item){return landscape(uniqueImages(sourceImages(item,false)),'catalog-poster');}
     function alternatives(item){
@@ -294,17 +302,19 @@
       }
       return firstAvailable(tasks);
     }
-    return listed().then(function(value){
+    return (hero?listed():shared().then(function(value){return value||listed();})).then(function(value){
       if(value)return value;
-      return firstAvailable([entry.metadataTask.then(listed),catalog(entry.item),entry.ready.then(function(){
+      var pending=[entry.metadataTask.then(listed),catalog(entry.item),entry.ready.then(function(){
         return backdropDetails(entry).then(function(full){
           return listed().then(function(found){return found||catalog(full);}).then(function(found){return found||alternatives(full);});
         });
-      })]);
+      })];
+      if(!hero&&entry.assets.hero)pending.push(entry.assets.hero.then(shared));
+      return firstAvailable(pending);
     }).then(function(selection){
       selection=selection||fallback;
       if(!selection)return null;
-      rememberFamily(entry,selection.sourceURL);
+      rememberFamily(entry,selection.sourceURL,role);
       return selection.value;
     });
   }

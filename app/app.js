@@ -254,7 +254,16 @@
       if(g!==generation)return;loading.remove();
       var pool={popular:rows[0],films:rows[1],series:rows[2],cartoons:[]},promo=featured(promoState&&promoState.items||cache[promoKey]||WePlayPromo.select(pool,WePlayCatalog.releaseYear(),12),promoState?promoState.ready:!!cache[promoKey],promoState);content.appendChild(promo);
       function commitPromo(selected){var frozen=promo.updateItems(selected,true);if(frozen&&frozen.length)cache[promoKey]=frozen;}
-      var continuing=WePlayProgress.list().map(function(record){return WePlayCatalog.find(record.item.id)||record.item;});if(continuing.length)content.appendChild(homeRail(continuing,['Продолжить просмотр','continue'],'continue'));
+      var continuing=WePlayProgress.list().map(function(record){
+        var known=WePlayCatalog.find(record.item.id);
+        if(!known)return record.item;
+        if(!WePlayCatalogUnion.same(known,record.item))return known;
+        var fields=WePlayCatalogUnion.fields(known),saved=record.item.xfields;
+        if(fields.backdrops&&saved.backdrops)fields.backdrops=[].concat(fields.backdrops,saved.backdrops);
+        Object.keys(saved).forEach(function(key){if(!fields[key])fields[key]=saved[key];});
+        return Object.assign({},known,{xfields:fields});
+      });
+      if(continuing.length)content.appendChild(homeRail(continuing,['Продолжить просмотр','continue'],'continue'));
       rows.forEach(function(items,index){content.appendChild(homeRail(items,specs[index],index));});diagnostic('homeReady',rows.map(function(r){return r.length;}).join(','));
       var releases=WePlayCatalog.releaseSections(),note=WePlayLoading.create('Загружаем новинки');note.classList.add('inline-loading');content.appendChild(note);
       var waitForRows=restore&&((route.focusRail&&!document.getElementById(route.focusRail))||(route.scroll||0)>Math.max(0,viewport.scrollHeight-viewport.clientHeight)+1);
@@ -266,7 +275,8 @@
     }).catch(function(e){if(g===generation){loading.remove();errorBox(e.message,function(){navigate(current);});}});
   }
   function homeRail(items,spec,index){
-    items=WePlayCatalog.dedupe(items);
+    // History is already deduplicated. Keep its saved artwork alongside the live catalog fields.
+    if(index!=='continue')items=WePlayCatalog.dedupe(items);
     var section=element('section','home-section'),heading=element('div','section-heading'),controls=element('div','rail-controls');
     heading.appendChild(element('h2','',spec[0]));
     var rail=gridOf(items,'home-'+index);rail.classList.add('home-rail');rail.setAttribute('data-focus-grid','0');rail.id='home-rail-'+index;rail.setAttribute('aria-label',spec[0]);
