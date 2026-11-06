@@ -250,7 +250,7 @@
     var specs=[['Популярное',219],['Фильмы',106],['Сериалы',13]];
     return Promise.all(specs.map(function(spec){
       var key='home-'+spec[1];return cache[key]?Promise.resolve(cache[key]):news(spec[1],1,null,18,true).then(function(j){cache[key]=listOf(j);return cache[key];},function(){return null;});
-    })).then(function(rows){if(g!==generation)return rows;if(rows.every(function(row){return row===null;}))throw new Error('Каталоги сейчас недоступны. Попробуйте позже.');rows=rows.map(function(row){return row||[];});var seed=promoState&&promoState.items||cache[promoKey]||WePlayPromo.select({popular:rows[0],films:rows[1],series:rows[2]},WePlayCatalog.releaseYear(),12),artSeed=promoState?seed.slice(promoState.index).concat(seed.slice(0,promoState.index)):seed;return Promise.all([WePlayArtwork.prepare(artSeed,true,true,2),WePlayArtwork.prepare(rows[0],true,false,5)]).then(function(){return rows;});}).then(function(rows){
+    })).then(function(rows){if(g!==generation)return rows;if(rows.every(function(row){return row===null;}))throw new Error('Каталоги сейчас недоступны. Попробуйте позже.');rows=rows.map(function(row){return row||[];});
       if(g!==generation)return;loading.remove();
       var pool={popular:rows[0],films:rows[1],series:rows[2],cartoons:[]},promo=featured(promoState&&promoState.items||cache[promoKey]||WePlayPromo.select(pool,WePlayCatalog.releaseYear(),12),promoState?promoState.ready:!!cache[promoKey],promoState);content.appendChild(promo);
       function commitPromo(selected){var frozen=promo.updateItems(selected,true);if(frozen&&frozen.length)cache[promoKey]=frozen;}
@@ -300,7 +300,7 @@
     function interact(){if(disposed)return;remaining=DWELL;lastTick=Date.now();interacted=true;paintClock();}
     function visibility(){lastTick=Date.now();paintClock();}
     function cancelSlideCleanup(slide){clearTimeout(slide._leaveTimer);if(slide._leaveEnd)slide.removeEventListener('transitionend',slide._leaveEnd);slide._leaveTimer=null;slide._leaveEnd=null;}
-    function removeSlide(slide){cancelSlideCleanup(slide);slide.remove();}
+    function removeSlide(slide){cancelSlideCleanup(slide);WePlayArtwork.release(slide);slide.remove();}
     function tick(){if(disposed||!host.isConnected)return;var now=Date.now(),delta=Math.max(0,now-lastTick);lastTick=now;if(!paused()){remaining=Math.max(0,remaining-delta);if(remaining<=0){index=(index+1)%items.length;draw(1);}}paintClock();}
     document.addEventListener('keydown',interact,true);document.addEventListener('mousedown',interact,true);document.addEventListener('visibilitychange',visibility);viewport.addEventListener('scroll',visibility);
     featuredDispose=function(){disposed=true;clearInterval(ticker);host.querySelectorAll('.featured-slide').forEach(cancelSlideCleanup);document.removeEventListener('keydown',interact,true);document.removeEventListener('mousedown',interact,true);document.removeEventListener('visibilitychange',visibility);viewport.removeEventListener('scroll',visibility);};ticker=setInterval(tick,250);
@@ -337,12 +337,12 @@
         old.style.opacity='0';old.style.transform='translateX('+(-direction*8)+'px)';slide.style.opacity='1';slide.style.transform='translateX(0)';
         var timing=getComputedStyle(old).transitionDuration.match(/(\d+(?:[.,]\d+)?|[.,]\d+)\s*(ms|s)/),duration=timing?Number(timing[1].replace(',','.'))*(timing[2]==='ms'?1:1000):600;old._leaveTimer=setTimeout(finish,duration+100);
       });});}
-      if(focused)focus(document.getElementById(focused));WePlayArtwork.prefetch([items[(index+1)%items.length]],true,true,1);
+      if(focused)focus(document.getElementById(focused));
     }
     host.updateItems=function(next,done){
       if(disposed)return null;if(ready)return items.slice();if(!done)return null;
       var first=items[0],hadItems=items.length;next=unique(next);items=unique(first?[first].concat(next):next);index=0;ready=true;remaining=DWELL;lastTick=Date.now();host.setAttribute('data-promo-ready','true');host.setAttribute('aria-busy','false');
-      if(!hadItems&&items.length)draw(0);else{position.textContent=items.length?'1 / '+items.length:'';paintDots();paintClock();}var empty=host.querySelector('.featured-empty');if(!items.length&&empty)empty.textContent='Пока нет новинок с рейтингом от 7';if(items.length>1)WePlayArtwork.prefetch([items[1]],true,true,1);diagnostic('promoReady',items.length);return items.slice();
+      if(!hadItems&&items.length)draw(0);else{position.textContent=items.length?'1 / '+items.length:'';paintDots();paintClock();}var empty=host.querySelector('.featured-empty');if(!items.length&&empty)empty.textContent='Пока нет новинок с рейтингом от 7';diagnostic('promoReady',items.length);return items.slice();
     };
     host.navigationState=function(){return{items:items.slice(),ready:ready,index:index,id:items[index]&&items[index].id,remaining:remaining,interacted:interacted};};
     host.promoSnapshot=function(){return items.map(function(item){return{id:item.id,kind:WePlayPromo.kind(item),year:WePlayPromo.year(item),score:WePlayPromo.score(item)};});};
@@ -511,7 +511,7 @@
     var route=current,known=cache['full-'+route.id];var loading=pageLoader('Загружаем фильм');
     return (known?Promise.resolve(known):api({action:'news',do:'get',id:route.id}).then(function(j){
       var d=j.data,item=Array.isArray(d)?d[0]:(d.item||d.news||d);if(!item||!item.id)throw new Error('Фильм не найден');cache['full-'+route.id]=item;return item;
-    })).then(function(item){if(g!==generation)return item;return WePlayArtwork.prepare([item],true,true,1).then(function(){return item;});}).then(function(item){
+    })).then(function(item){
       if(g!==generation)return;loading.remove();
       var top=element('header','detail-topbar');top.appendChild(detailIconButton('Назад','arrow-left','secondary detail-back',back,'detail-back'));var headerActions=element('div','detail-header-actions');appendUpdateControl(headerActions);headerActions.appendChild(supportControl());top.appendChild(headerActions);content.appendChild(top);
       var wrap=element('article','detail'),hero=element('section','detail-hero'),art=element('div','detail-art'),background=element('img'),serial=isSeries(item);

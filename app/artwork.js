@@ -107,7 +107,7 @@
     var work=queue.shift();running++;work.run().finally(function(){running--;pump();});pump();
   }
   function get(item,priority){
-    var k=itemKey(item),stored=saved(item),useAPI=window.WePlayTMDB&&WePlayTMDB.available(),packaged=useAPI&&WePlayTMDB.indexed&&WePlayTMDB.indexed(item);if(packaged&&(!stored||!stored.data.tmdbAPI)){packaged=checked(packaged,item);if(stored&&stored.data.castSource==='TVmaze'){packaged.cast=stored.data.cast;packaged.castSource='TVmaze';}persist(k,packaged);return Promise.resolve(packaged);}if(stored&&(!useAPI||stored.data.tmdbAPI||Date.now()-(stored.data.tmdbAttemptedAt||0)<600000))return Promise.resolve(stored.data);var x=WePlayCatalogUnion.fields(item),lookup=k+'|query:'+normal(x.original_title||item.title);
+    var k=itemKey(item),stored=saved(item),useAPI=window.WePlayTMDB&&WePlayTMDB.available(),packaged=window.WePlayTMDB&&WePlayTMDB.indexed&&WePlayTMDB.indexed(item);if(packaged&&(!stored||!stored.data.tmdbAPI)){packaged=checked(packaged,item);if(stored&&stored.data.castSource==='TVmaze'){packaged.cast=stored.data.cast;packaged.castSource='TVmaze';}persist(k,packaged);return Promise.resolve(packaged);}if(stored&&(!useAPI||stored.data.tmdbAPI||Date.now()-(stored.data.tmdbAttemptedAt||0)<600000))return Promise.resolve(stored.data);var x=WePlayCatalogUnion.fields(item),lookup=k+'|query:'+normal(x.original_title||item.title);
     if(pending[lookup]){if(priority){var at=queue.findIndex(function(work){return work.key===lookup;});if(at>0)queue.unshift(queue.splice(at,1)[0]);}return pending[lookup];}
     if(failures[lookup]&&Date.now()-failures[lookup]<600000)return Promise.resolve(null);
     pending[lookup]=new Promise(function(resolve){var work={key:lookup,run:function(){
@@ -162,10 +162,10 @@
     sourceImages(item,true).forEach(function(raw){var url=new URL(raw),match=url.hostname==='st.kp.yandex.net'?url.pathname.match(/^\/images\/(?:film_big\/|film_iphone\/iphone\d+_)([1-9]\d{0,8})\.jpg$/):url.hostname==='kinopoiskapiunofficial.tech'?url.pathname.match(/^\/images\/posters\/kp(?:_small)?\/([1-9]\d{0,8})\.jpg$/):null;if(match)ids[match[1]]=true;});
     var found=Object.keys(ids);return found.length===1?found[0]:'';
   }
-  function sourceImages(item,compact){
+  function sourceImages(item,compact,fields){
     var urls=[];
     function add(value,record){if(!value)return;if(Array.isArray(value)){value.forEach(function(v){add(v,record);});return;}if(typeof value==='object'){add(value.url||value.src||value.contentUrl,record);return;}var raw=String(value).trim(),m=raw.match(/data-(?:src|original|lazy-src)\s*=\s*["']([^"']+)["']/i)||raw.match(/\bsrc\s*=\s*["']([^"']+)["']/i);if(m)raw=m[1];raw=raw.replace(/&amp;/g,'&');if(!raw||raw==='null'||/^(?:data|blob):/i.test(raw)||/(?:^|[\/_-])(?:no[-_]?(?:image|poster|photo)|placeholder|spacer|blank|loading)(?:[.\/_-]|$)/i.test(raw))return;if(!/^(https?:)?\//.test(raw))raw=raw.indexOf('uploads/')===0?'/'+raw:'/uploads/posts/'+raw;try{var url=new URL(raw,record._url||item._url||'https://lord.kim/');if(!/^https?:$/.test(url.protocol))return;raw=url.href;}catch(ignore){return;}var original=raw.replace(/\/(?:thumbs|medium)\//g,'/');(compact?[raw]:[original,raw]).forEach(function(url){if(urls.indexOf(url)<0)urls.push(url);});}
-    [item].concat(item._alternatives||[]).forEach(function(record){var x=WePlayCatalogUnion.fields(record);['image','download_poster','poster','poster_url','thumbnail','thumb'].forEach(function(key){add(x[key]||record[key],record);});});return urls;
+    [item].concat(item._alternatives||[]).forEach(function(record){var x=WePlayCatalogUnion.fields(record);(fields||['image','download_poster','poster','poster_url','thumbnail','thumb']).forEach(function(key){add(x[key]||record[key],record);});});return urls;
   }
   /* One identity, one resource packet and one selected image family for every page. */
   function sameResource(record,item){
@@ -184,14 +184,22 @@
     return record;
   }
   function normalizedImages(item,data){
-    data=data||{};var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((data.backgrounds||[]).concat([data.background,data.backgroundThumb]));
+    data=data||{};var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((data.backgrounds||[]).concat([data.background,data.backgroundThumb],sourceImages(item,false,['background','backdrop','background_url','backdrop_url','fanart'])));
     return{landscapes:landscapes,posters:posters,original:landscapes[0]||posters[0]||'',preview:landscapes[0]?candidates(landscapes[0],'wide')[0]:posters[0]?candidates(posters[0],'wide')[0]:'',poster:posters[0]?candidates(posters[0],'poster')[0]:'',source:data.backgroundSource||data.source||'catalog',creditURL:data.backgroundCredit||data.castPage||''};
   }
   function resourceFor(item,priority){
     var entry=resources.filter(function(record){return sameResource(record,item);})[0],wanted=identity(item);
     if(entry){wanted.names.forEach(function(name){if(entry.identity.names.indexOf(name)<0)entry.identity.names.push(name);});Object.assign(entry.identity.ids,wanted.ids);entry.identity.kind=entry.identity.kind||wanted.kind;entry.identity.year=entry.identity.year||wanted.year;return entry;}
     entry={key:itemKey(item),identity:wanted,item:item,images:null,actors:[],metadata:null,assets:{},selection:null,actorTask:null};resources.push(entry);while(resources.length>160)resources.shift();
-    entry.ready=Promise.race([get(item,priority),new Promise(function(resolve){setTimeout(function(){resolve(null);},1800);})]).then(function(data){entry.metadata=data||null;entry.images=normalizedImages(item,data);entry.actors=(data&&data.cast||[]).map(function(person){return personRecord(person,data.castSource||data.source);});return entry;});
+    var cached=saved(item),initial=cached&&cached.data||window.WePlayTMDB&&WePlayTMDB.indexed(item);
+    function update(data){
+      entry.metadata=data||null;entry.images=normalizedImages(item,data);
+      entry.actors=(data&&data.cast||[]).map(function(person){return personRecord(person,data.castSource||data.source);});
+      return entry;
+    }
+    update(initial);
+    entry.metadataTask=get(item,priority).then(function(data){return data?update(data):entry;});
+    entry.ready=Promise.race([entry.metadataTask,new Promise(function(resolve){setTimeout(function(){resolve(entry);},500);})]);
     return entry;
   }
   function rememberFamily(entry,selection){
@@ -216,16 +224,34 @@
       });
     });return entry.selection;
   }
+  function selectHero(entry){
+    var tried=[];
+    function landscape(){
+      var urls=[];
+      entry.images.landscapes.forEach(function(raw){
+        candidates(raw,'hero').concat(imageURL(raw,'w1280')||[]).forEach(function(url){
+          if(tried.indexOf(url)<0){tried.push(url);urls.push(url);}
+        });
+      });
+      return firstImage(urls,'hero',true,{timeout:2600,priority:3}).then(function(value){
+        return value&&Object.assign(value,{credit:entry.images.source,creditURL:entry.images.creditURL});
+      });
+    }
+    return landscape().then(function(value){return value||entry.metadataTask.then(landscape);});
+  }
   function resourceAsset(entry,role){
     if(entry.assets[role])return entry.assets[role];
     if(!entry.retryAt)entry.retryAt={};if(entry.retryAt[role]&&Date.now()<entry.retryAt[role])return Promise.resolve(null);
-    entry.assets[role]=(role==='poster'?selectPoster(entry).then(function(selection){return selection&&selection.preview;}):selectCover(entry).then(function(selection){
-      if(!selection)return null;if(role==='wide')return Object.assign({},selection.preview,{posterFallback:false,credit:selection.credit,creditURL:selection.creditURL});
-      var fullRole=selection.posterFallback?'poster':'hero';return firstImage(candidates(selection.sourceURL,'hero'),fullRole,true,{timeout:3500,priority:2}).then(function(value){
-        // When the original fails, retain this very image's preview rather than switch artwork.
-        return Object.assign({},imageValue(value)||selection.preview,{posterFallback:selection.posterFallback,credit:selection.credit,creditURL:selection.creditURL});
-      });
-    })).then(function(value){if(!value){entry.retryAt[role]=Date.now()+30000;entry.posterTask=null;if(role!=='poster')entry.selection=null;delete entry.assets[role];}return imageValue(value);}).catch(function(){entry.retryAt[role]=Date.now()+30000;if(role!=='poster')entry.selection=null;delete entry.assets[role];return null;});return entry.assets[role];
+    function retry(){
+      entry.retryAt[role]=Date.now()+(role==='hero'?5000:30000);
+      if(role==='poster')entry.posterTask=null;
+      if(role==='wide')entry.selection=null;
+      delete entry.assets[role];
+      return null;
+    }
+    entry.assets[role]=(role==='hero'?selectHero(entry):role==='poster'?selectPoster(entry).then(function(selection){return selection&&selection.preview;}):selectCover(entry).then(function(selection){
+      return selection&&Object.assign({},selection.preview,{posterFallback:false,credit:selection.credit,creditURL:selection.creditURL});
+    })).then(function(value){return value?imageValue(value):retry();},retry);return entry.assets[role];
   }
   function asset(item,role,priority){return resourceAsset(resourceFor(item,priority),role);}
   function resolveResource(item,options){var entry=resourceFor(item,true);return entry.ready.then(function(){return selectCover(entry);}).then(function(){if(!options||!options.actors)return entry;return resourceActors(entry).then(function(){return entry;});});}
@@ -236,15 +262,28 @@
   function cachedResource(item){return resources.filter(function(entry){return sameResource(entry,item)&&entry.images;})[0]||null;}
   function unavailable(img){img.style.visibility='hidden';img.removeAttribute('src');var parent=img.parentNode;if(!parent)return;parent.classList.remove('artwork-loading');parent.removeAttribute('aria-busy');if(parent.classList.contains('poster-wrap')&&!parent.querySelector('.poster-fallback')){var text=document.createElement('div');text.className='poster-fallback';text.textContent=img.alt;parent.appendChild(text);}else parent.classList.add('unavailable');}
   function commit(img,value){
-    if(!img.isConnected||img._weplayRetired||img._weplayCommitted)return;if(!value){unavailable(img);return;}
-    img._weplayCommitted=true;img.setAttribute('data-artwork-resolution',value.width+'x'+value.height);
-    function reveal(){if(!img.isConnected||img._weplayRetired)return;img.parentNode.classList.toggle('artwork-poster-fallback',!!value.posterFallback);img.style.visibility='visible';img.setAttribute('data-artwork-ready','true');var parent=img.parentNode;parent.classList.remove('artwork-loading');parent.classList.remove('unavailable');parent.removeAttribute('aria-busy');if(img._weplayArt&&img._weplayArt.role==='hero'&&value.credit==='TVmaze'&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(value.creditURL||'')&&!parent.querySelector('.artwork-credit')){var credit=document.createElement('a');credit.className='artwork-credit';credit.textContent='Изображение: TVmaze';credit.href=value.creditURL;credit.tabIndex=-1;parent.appendChild(credit);}}
-    function loaded(){validPoster(value.url,img).then(function(valid){if(!valid){unavailable(img);return;}if(img.decode)img.decode().then(reveal,reveal);else reveal();});}img.onload=loaded;img.onerror=function(){unavailable(img);};img.src=value.url;if(img.complete&&img.naturalWidth)loaded();
+    if(!img.isConnected||img._weplayRetired||img._weplayCommitted&&!img._weplayCommitted.posterFallback)return;if(!value){if(!img._weplayCommitted)unavailable(img);return;}
+    var previous=img._weplayCommitted;img._weplayCommitted=value;
+    function reveal(){if(!img.isConnected||img._weplayRetired||img._weplayCommitted!==value)return;img.setAttribute('data-artwork-resolution',value.width+'x'+value.height);img.parentNode.classList.toggle('artwork-poster-fallback',!!value.posterFallback);img.style.visibility='visible';img.setAttribute('data-artwork-ready','true');var parent=img.parentNode;parent.classList.remove('artwork-loading');parent.classList.remove('unavailable');parent.removeAttribute('aria-busy');if(img._weplayArt&&img._weplayArt.role==='hero'&&value.credit==='TVmaze'&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(value.creditURL||'')&&!parent.querySelector('.artwork-credit')){var credit=document.createElement('a');credit.className='artwork-credit';credit.textContent='Изображение: TVmaze';credit.href=value.creditURL;credit.tabIndex=-1;parent.appendChild(credit);}}
+    function failed(){if(img._weplayCommitted!==value||img._weplayRetired)return;img._weplayCommitted=null;if(previous)commit(img,previous);else unavailable(img);}function loaded(){validPoster(value.url,img).then(function(valid){if(!valid){failed();return;}if(img.decode)img.decode().then(reveal,failed);else reveal();});}img.onload=loaded;img.onerror=failed;img.src=value.url;if(img.complete&&img.naturalWidth)loaded();
   }
-  function start(img){var config=img._weplayArt;if(!config||img._weplayRetired||img._weplayStarted||img._weplayCommitted||!img.isConnected)return;img._weplayStarted=true;var rect=img.getBoundingClientRect(),visible=rect.top<innerHeight&&rect.bottom>0&&rect.left<innerWidth&&rect.right>0;asset(config.item,config.role,config.role==='hero'||visible).then(function(value){commit(img,value);});}
+  function start(img){var config=img._weplayArt;if(!config||img._weplayRetired||img._weplayStarted||img._weplayCommitted||!img.isConnected)return;img._weplayStarted=true;var rect=img.getBoundingClientRect(),visible=rect.top<innerHeight&&rect.bottom>0&&rect.left<innerWidth&&rect.right>0;var entry=resourceFor(config.item,config.role==='hero'||visible);
+    if(config.role!=='hero'){resourceAsset(entry,config.role).then(function(value){commit(img,value);});return;}
+    var hero=resourceAsset(entry,'hero');
+    var fallback=resourceAsset(entry,'poster').then(function(value){
+      if(value&&!img._weplayCommitted)commit(img,Object.assign({},value,{posterFallback:true}));
+    });
+    hero.then(function(value){
+      if(value){commit(img,value);return;}
+      fallback.then(function(){commit(img,null);});
+      if(!img.isConnected||img._weplayRetired||!entry.images.landscapes.length)return;
+      img._weplayArtRetry=setTimeout(function(){
+        if(img.isConnected&&!img._weplayRetired)resourceAsset(entry,'hero').then(function(next){if(next)commit(img,next);});
+      },Math.max(0,entry.retryAt.hero-Date.now())+50);
+    });}
   var observer=typeof IntersectionObserver!=='undefined'?new IntersectionObserver(function(entries){entries.forEach(function(entry){if(entry.isIntersecting){observer.unobserve(entry.target);start(entry.target);}});},{root:document.getElementById('content'),rootMargin:'320px 160px'}):null;
   function bind(img,item,wide,full,eager){
-    if(img._weplayArt)return;img.style.visibility='hidden';img._weplayArt={item:item,role:typeof wide==='string'?({backdrop:'hero',preview:'wide',poster:'poster'}[wide]||wide):roleOf(wide,full)};img.setAttribute('data-artwork-key',resourceFor(item,!!full).key);if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
+    if(img._weplayArt)return;img.style.visibility='hidden';img._weplayArt={item:item,role:typeof wide==='string'?({backdrop:'hero',preview:'wide',poster:'poster'}[wide]||wide):roleOf(wide,full)};img.setAttribute('data-artwork-key',itemKey(item));if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
     if(eager||!observer){if(img.isConnected)start(img);else requestAnimationFrame(function(){start(img);});}else observer.observe(img);
   }
   function prefetch(items,wide,full,count){return Promise.all((items||[]).slice(0,count||items.length).map(function(item){return asset(item,roleOf(wide,full),!!full);}));}
@@ -276,5 +315,5 @@
     if(img._weplayProfile||!imageURL(raw,'h632')&&!/^https:\/\/static\.tvmaze\.com\/uploads\/images\/(?:original_untouched|medium_portrait)\/\d+\/\d+\.(?:jpg|png|webp)$/.test(raw||''))return;img._weplayProfile=true;img.style.visibility='hidden';if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
     function run(){if(!img.isConnected||img._weplayRetired)return;if(actor.photoRetry&&Date.now()<actor.photoRetry){unavailable(img);return;}if(!actor.photoTask)actor.photoTask=firstImage(candidates(raw,'person'),'person',true).then(function(value){if(!value){actor.photoTask=null;actor.photoRetry=Date.now()+30000;}return imageValue(value);});actor.photoTask.then(function(value){commit(img,value);});}if(img.isConnected)run();else requestAnimationFrame(run);
   }
-  window.WePlayArtwork={get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
+  window.WePlayArtwork={get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;clearTimeout(img._weplayArtRetry);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
 }());

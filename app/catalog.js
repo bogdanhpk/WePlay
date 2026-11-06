@@ -199,20 +199,31 @@
   function mergedListing(params,preview){
     var revision=epoch,page=Math.max(1,Number(params.page)||1),limit=Math.max(1,Math.min(120,Number(params.limit)||60)),query=Object.assign({},params);delete query.page;
     var feedKey=(preview?'home|':'')+key(query),feed=feeds[feedKey];
+    var savedPreview=preview&&page===1&&stored['home|'+key(Object.assign({},params,{page:1}))];
+    if(!feed&&savedPreview&&Date.now()-savedPreview.at<300000&&itemsOf(savedPreview.data).length){
+      return Promise.resolve(register(savedPreview.data));
+    }
     if(!feed){feed={limit:limit,buffer:[],seen:[],pages:[],sources:candidates(params).map(function(c){return{source:c.source,category:c.category,next:1,ended:false};}),fresh:false,used:[],serial:Promise.resolve(),failures:[]};feeds[feedKey]=feed;}
     function freshBuffer(){var seen={};feed.seen.forEach(function(id){seen[union.canonical(id)]=true;});feed.buffer=union.combine(feed.buffer).filter(function(item){return !seen[union.canonical(item.id)];});}
     function hasMore(){return feed.buffer.length>0||feed.sources.some(function(s){return !s.ended;});}
     function build(number){
       // A home preview is separate from the complete feed used in catalog sections.
-      var rounds=0,controller=preview?new AbortController():null,cutoff,timer;
+      var rounds=0,controller=preview?new AbortController():null,cutoff,timer,grace;
       var options=preview?{preview:true,deadline:Date.now()+4200,signal:controller.signal}:null;
-      if(preview)cutoff=new Promise(function(resolve,reject){timer=setTimeout(function(){controller.abort();reject(new Error('Источник не ответил вовремя.'));},4500);});
+      var finishPreview;
+      if(preview)cutoff=new Promise(function(resolve,reject){
+        finishPreview=function(){controller.abort();reject(new Error('Время первого показа истекло.'));};
+        timer=setTimeout(finishPreview,4500);
+      });
       function fill(){
         if(revision!==epoch)throw new Error('Источник изменён.');freshBuffer();var batch=feed.sources.filter(function(s){return !s.ended;});
         if(feed.buffer.length>=feed.limit||!batch.length||rounds++>=(preview?1:4))return Promise.resolve();
         return Promise.all(batch.map(function(cursor){var request=Object.assign({},params,{page:cursor.next,limit:60,category:cursor.category});
           var read=preview?Promise.race([requestFrom(cursor.source,request,true,true,options),cutoff]):combinedRead(cursor.source,request);
-          return read.then(function(j){return {cursor:cursor,data:j};},function(e){cursor.ended=true;feed.failures.push(cursor.source.id);return{error:e};});
+          return read.then(function(j){
+            if(preview&&!grace&&itemsOf(j).length)grace=setTimeout(finishPreview,650);
+            return {cursor:cursor,data:j};
+          },function(e){cursor.ended=true;feed.failures.push(cursor.source.id);return{error:e};});
         })).then(function(results){
           var rows=[];results.forEach(function(result){if(!result.data)return;var cursor=result.cursor,j=result.data,items=itemsOf(j),pagination=j.data&&j.data.pagination;rows.push(items);feed.fresh=feed.fresh||!j._saved;if(feed.used.indexOf(cursor.source.id)<0)feed.used.push(cursor.source.id);cursor.ended=pagination?cursor.next>=Number(pagination.pages||cursor.next):items.length<60;cursor.next++;});
           var length=rows.reduce(function(n,row){return Math.max(n,row.length);},0);for(var i=0;i<length;i++)rows.forEach(function(row){if(row[i])feed.buffer.push(row[i]);});return fill();
@@ -224,7 +235,7 @@
         if(!feed.used.length){var saved=stored[(preview?'home|':'all|')+key(Object.assign({},params,{page:number}))]||stored['all|'+key(Object.assign({},params,{page:number}))];if(saved){offline=true;notify();return register(saved.data);}delete feeds[feedKey];throw new Error('Каталоги сейчас недоступны. Попробуйте позже.');}
         active=source(feed.used[0]);offline=!feed.fresh;var result={success:true,data:{items:items,pagination:{page:number,pages:hasMore()?number+1:number,total:null},sources:feed.used.slice(),partial:feed.failures.length>0}};
         persist((preview?'home|':'all|')+key(Object.assign({},params,{page:number})),result);notify();return result;
-      }).finally(function(){if(timer)clearTimeout(timer);});
+      }).finally(function(){clearTimeout(timer);clearTimeout(grace);});
     }
     function ensure(){if(revision!==epoch)throw new Error('Источник изменён.');if(feed.pages[page-1]){var cached=feed.pages[page-1];cached.data.items=union.combine(cached.data.items);return cached;}var number=feed.pages.length+1;return build(number).then(function(j){feed.pages.push(j);return number<page?ensure():j;});}
     var task=feed.serial.catch(function(){}).then(ensure);feed.serial=task;return task;
