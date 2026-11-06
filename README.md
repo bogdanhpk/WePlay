@@ -9,8 +9,8 @@ WePlay — приложение для просмотра фильмов, сер
 | Платформа | Требования | Установщик | Инструкция |
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
-| LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.0](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.0_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
-| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.5](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.5.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+| LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.1](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.1_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
+| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.6](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.6.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 

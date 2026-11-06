@@ -27,6 +27,7 @@
     return send.call(this,body);
   };
   window.WePlayAndroid={
+    mediaURL:function(url){return transport(url,'omit');},
     key:function(type,code,repeat){
       var target=document.activeElement||document,keys={13:'Enter',27:'Escape',37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown'};
       var event=new KeyboardEvent(type,{key:keys[code]||'Unidentified',keyCode:code,which:code,bubbles:true,cancelable:true,repeat:!!repeat});

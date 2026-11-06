@@ -36,7 +36,7 @@
     function ensure(){if(stamp!==revision)throw new Error('Источник изменён.');if(feed.pages[page-1])return restore(feed.pages[page-1]);var number=feed.pages.length+1;return build(number).then(function(j){feed.pages.push(j);return number<page?ensure():j;});}
     var pending=feed.serial.catch(function(){}).then(ensure);feed.serial=pending;return pending;
   }
-  catalog.api=function(params){var spec=definition(params.category);return spec&&params.do!=='get'?recent(params,spec):baseApi(params);};
+  catalog.api=function(params,preview){var spec=definition(params.category);return spec&&params.do!=='get'?recent(params,spec):baseApi(params,preview);};
   catalog.releaseSections=function(){return definitions.map(function(value){return Object.assign({},value);});};
   catalog.releaseYear=year;
   catalog.isReleaseCategory=function(id){return !!definition(id);};

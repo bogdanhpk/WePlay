@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const dns = require('dns');
 const URL = require('url').URL;
 const cookies = new Map();
-const catalogHost = /^(?:lord\.kim|sb\.lordfilm5\.pro|lordfilms\.pub|lordfilm\.vc|lordfilm26-kino\d+\.lat)$/;
+const catalogHost = /^(?:lord\.kim|(?:sb|sn)\.lordfilm5\.pro|lordfilms\.pub|lordfilm\.vc|lordfilm26-kino\d+\.lat)$/;
 const responseHeaders = ['content-type', 'content-length', 'content-encoding', 'content-range', 'accept-ranges', 'date', 'age'];
 
 function publicAddress(address) {
@@ -29,7 +29,8 @@ function lookup(host, options, callback) {
   });
 }
 
-function rememberCookies(host, entries) {
+function rememberCookies(target, entries) {
+  const host = target.hostname;
   const jar = cookies.get(host) || new Map();
   entries.forEach(function (entry) {
     const fields = entry.split(';');
@@ -37,13 +38,15 @@ function rememberCookies(host, entries) {
     const delimiter = pair.indexOf('=');
     if (delimiter < 1 || pair.length > 2048) return;
     const name = pair.slice(0, delimiter);
-    // Keep only guest session cookies whose path covers the full catalog.
-    if (fields.some(field => /^\s*path\s*=\s*[^\s/]|^\s*path\s*=\s*\/\S/i.test(field))) return;
+    const pathField = fields.find(field => /^\s*path\s*=/i.test(field));
+    const pathValue = pathField ? pathField.slice(pathField.indexOf('=') + 1).trim() : '';
+    const path = pathValue.charAt(0) === '/' ? pathValue : target.pathname.slice(0, target.pathname.lastIndexOf('/')) || '/';
+    const key = name + '\n' + path;
     const age = fields.find(field => /^\s*max-age\s*=/i.test(field));
     const expiry = fields.find(field => /^\s*expires\s*=/i.test(field));
     const expiresAt = age ? Date.now() + Number(age.split('=')[1]) * 1000 : expiry ? Date.parse(expiry.split('=')[1]) : Infinity;
-    if (expiresAt <= Date.now()) jar.delete(name);
-    else jar.set(name, {pair: pair, expiresAt: expiresAt});
+    if (expiresAt <= Date.now()) jar.delete(key);
+    else jar.set(key, {pair: pair, path: path, expiresAt: isNaN(expiresAt) ? Infinity : expiresAt});
   });
   while (jar.size > 12) jar.delete(jar.keys().next().value);
   cookies.delete(host);
@@ -51,7 +54,7 @@ function rememberCookies(host, entries) {
   while (cookies.size > 20) cookies.delete(cookies.keys().next().value);
 }
 
-function forward(raw, request, reply, withCookies, redirects) {
+function forward(raw, request, reply, withCookies, redirects, retried) {
   if (reply.destroyed || reply.finished) return;
   let target;
   try { target = new URL(raw); } catch (ignore) {}
@@ -68,19 +71,23 @@ function forward(raw, request, reply, withCookies, redirects) {
   });
   const useCookies = withCookies && catalogHost.test(target.hostname);
   if (useCookies && cookies.has(target.hostname)) {
-    const active = Array.from(cookies.get(target.hostname).values()).filter(cookie => cookie.expiresAt > Date.now());
+    const active = Array.from(cookies.get(target.hostname).values()).filter(cookie => cookie.expiresAt > Date.now()
+      && (target.pathname === cookie.path || target.pathname.indexOf(cookie.path + (cookie.path.endsWith('/') ? '' : '/')) === 0));
+    active.sort((a, b) => b.path.length - a.path.length);
     if (active.length) headers.Cookie = active.map(cookie => cookie.pair).join('; ');
   }
+  let handedOff = false;
   const upstream = https.request({
     hostname: target.hostname, path: target.pathname + target.search, method: request.method,
     headers: headers, lookup: lookup, agent: false
   }, function (response) {
-    if (useCookies && response.headers['set-cookie']) rememberCookies(target.hostname, response.headers['set-cookie']);
+    if (useCookies && response.headers['set-cookie']) rememberCookies(target, response.headers['set-cookie']);
     if ([301, 302, 303, 307, 308].indexOf(response.statusCode) >= 0 && response.headers.location) {
       let next;
       try { next = new URL(response.headers.location, target).href; } catch (ignore) {}
+      handedOff = true;
       response.destroy();
-      forward(next, request, reply, withCookies, redirects + 1);
+      forward(next, request, reply, withCookies, redirects + 1, retried);
       return;
     }
     responseHeaders.forEach(function (name) {
@@ -96,8 +103,12 @@ function forward(raw, request, reply, withCookies, redirects) {
   reply.once('close', closeUpstream);
   upstream.once('close', function () { reply.removeListener('close', closeUpstream); });
   upstream.setTimeout(12000, closeUpstream);
-  upstream.on('error', function () {
-    if (reply.destroyed || reply.finished) return;
+  upstream.on('error', function (error) {
+    if (handedOff || reply.destroyed || reply.finished) return;
+    if (!reply.headersSent && !retried && ['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAIN'].indexOf(error.code) >= 0) {
+      forward(raw, request, reply, withCookies, redirects, true);
+      return;
+    }
     if (reply.headersSent) reply.destroy();
     else reply.writeHead(502).end();
   });

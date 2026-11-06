@@ -239,7 +239,9 @@
     else startEngine(token,e,e.hls,position);
   }
   function startEngine(token,e,stream,position){
-    if(window.Hls&&Hls.isSupported()){
+    var raw=typeof stream==='string'?stream:stream.url;
+    var mp4=stream.format==='mp4'||stream.format!=='hls'&&/\.mp4(?:[?#]|$)/i.test(raw);
+    if(!mp4&&window.Hls&&Hls.isSupported()){
       api=null;video=el('video');video.id='native-video';video.autoplay=false;video.playsInline=true;
       var media=video;media.addEventListener('pause',function(){if(token===request)saveProgress(true);});media.addEventListener('timeupdate',function(){if(token===request)tick(media.currentTime*1000);});
       ['loadedmetadata','durationchange','loadeddata','resize'].forEach(function(name){media.addEventListener(name,function(){if(token===request)tick(currentTime);});});
@@ -255,12 +257,12 @@
       if(Hls.Events.LEVELS_UPDATED)hls.on(Hls.Events.LEVELS_UPDATED,function(){if(token===request){updateControls();if(menu&&menu.getAttribute('data-menu-kind')==='quality')chooseQuality();}});
       if(Hls.Events.SUBTITLE_TRACKS_UPDATED)hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED,function(){if(token===request)updateControls();});
       hls.on(Hls.Events.ERROR,function(ev,data){if(token!==request)return;report('hlsEvent',data.details+(data.response?' HTTP '+data.response.code:''));if(data.fatal){error('Не удалось загрузить видео. Попробуйте ещё раз.');}});
-      hls.attachMedia(media);hls.loadSource(stream);report('nativeStarted','HLS in application');
+      hls.attachMedia(media);hls.loadSource(raw);report('nativeStarted','HLS in application');
     }else if(window.webapis&&webapis.avplay){
       document.body.classList.add('avplay-active');
       api=webapis.avplay;var object=el('object');object.type='application/avplayer';object.id='native-video';options.surface.appendChild(object);
       try{
-        api.open(stream);api.setDisplayRect(0,0,1920,1080);
+        api.open(raw);api.setDisplayRect(0,0,1920,1080);
         try{api.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');api.setTimeoutForBuffering(20);api.setStreamingProperty('ADAPTIVE_INFO','STARTBITRATE=LOWEST');}catch(ignore){}
         api.setListener({
           onbufferingstart:function(){if(token===request){loading=true;updateControls();armHide();options.status.textContent='Загрузка видео…';}},
@@ -276,7 +278,7 @@
         api.prepareAsync(function(){if(token!==request)return;clearTimeout(prepareTimer);if(position>0)try{api.seekTo(position);}catch(ignore){}if(wantsPlay)play();totalTime=api.getDuration();report('nativeStarted',JSON.stringify({duration:totalTime,episode:episodeIndex}));show(false);},function(err){if(token===request){report('nativePrepareError',err.name||err.message||err);error('Не удалось загрузить видео. Попробуйте ещё раз.');}});
       }catch(err){error('Не удалось открыть видео: '+err.message);}
     }else{
-      api=null;video=el('video');video.id='native-video';video.autoplay=false;video.src=stream;var media=video;['loadedmetadata','loadeddata','resize'].forEach(function(name){media.addEventListener(name,function(){if(token===request){if(name==='loadedmetadata'&&position>0)media.currentTime=position/1000;updateControls();}});});video.addEventListener('pause',function(){if(token===request)saveProgress(true);});video.addEventListener('timeupdate',function(){if(token===request)tick(video.currentTime*1000);});video.addEventListener('playing',function(){if(token===request){if(suspended){pauseEngine();return;}loading=false;failed=false;currentTime=media.currentTime*1000;playbackStarted();options.status.textContent='';updateControls();armHide();}});video.addEventListener('ended',function(){if(token===request&&!suspended)completed();});video.addEventListener('error',function(){if(token===request)error('Не удалось загрузить видео. Попробуйте ещё раз.');});options.surface.appendChild(video);if(wantsPlay)play();
+      api=null;video=el('video');video.id='native-video';video.autoplay=false;video.playsInline=true;var platform=window.WePlayAndroid||window.WePlayWebOS;video.src=mp4&&platform?platform.mediaURL(raw):raw;var media=video;['loadedmetadata','loadeddata','resize'].forEach(function(name){media.addEventListener(name,function(){if(token===request){if(name==='loadedmetadata'&&position>0)media.currentTime=position/1000;updateControls();}});});video.addEventListener('pause',function(){if(token===request)saveProgress(true);});video.addEventListener('timeupdate',function(){if(token===request)tick(video.currentTime*1000);});video.addEventListener('playing',function(){if(token===request){if(suspended){pauseEngine();return;}loading=false;failed=false;currentTime=media.currentTime*1000;playbackStarted();options.status.textContent='';updateControls();armHide();}});video.addEventListener('ended',function(){if(token===request&&!suspended)completed();});video.addEventListener('error',function(){if(token===request)error('Не удалось загрузить видео. Попробуйте ещё раз.');});options.surface.appendChild(video);if(wantsPlay)play();
     }
   }
   function control(id,label,name,caption,action){

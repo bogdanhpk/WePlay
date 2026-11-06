@@ -70,11 +70,11 @@
     var d=j.data===undefined?j:j.data;
     return Array.isArray(d)?d:(d.items||d.news||d.list||[]);
   }
-  function api(params, retry) {
-    return WePlayCatalog.api(params);
+  function api(params, preview) {
+    return WePlayCatalog.api(params,preview);
   }
-  function news(category,page,search,limit) {
-    return api({action:'news',do:'list',category:category,page:page||1,limit:limit||60,approve:1,search:search||undefined});
+  function news(category,page,search,limit,preview) {
+    return api({action:'news',do:'list',category:category,page:page||1,limit:limit||60,approve:1,search:search||undefined},preview);
   }
   function focus(e,scroll) {if(WePlaySupport.isOpen()){WePlayFocus.focus(document.getElementById('support-close'),false);return;}WePlayFocus.focus(e,scroll);}
   function firstFocus() {focus(current.kind==='search'&&searchEditor&&searchEditor.initial()||current.kind==='home'&&document.getElementById('featured-open')||current.kind==='detail'&&document.querySelector('#watch:not(:disabled)')||current.kind==='releases'&&content.querySelector('.release-tabs [aria-selected="true"]')||content.querySelector('.error .focusable')||content.querySelector('.focusable:not(.support-action):not(.update-action)')||content.querySelector('.focusable')||nav.querySelector('.current'));}
@@ -248,8 +248,8 @@
     var top=element('header','home-topbar');var menu=button('','home-menu',openSidebar,'home-menu'),brandLogo=element('img','brand-logo');brandLogo.src=localAsset('assets/weplay-mark.png');brandLogo.alt='';brandLogo.width=32;brandLogo.height=32;brandLogo.setAttribute('aria-hidden','true');brandLogo.draggable=false;menu.appendChild(brandLogo);menu.appendChild(element('span','button-label','WePlay'));menu.setAttribute('aria-label','Открыть меню WePlay');menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-controls','sidebar');top.appendChild(menu);var headerActions=element('div','home-header-actions');appendUpdateControl(headerActions);headerActions.appendChild(supportControl());top.appendChild(headerActions);content.appendChild(top);var loading=pageLoader('Загружаем главную');
     var specs=[['Популярное',219],['Фильмы',106],['Сериалы',13]];
     return Promise.all(specs.map(function(spec){
-      var key='home-'+spec[1];return cache[key]?Promise.resolve(cache[key]):news(spec[1],1,null,18).then(function(j){cache[key]=listOf(j);return cache[key];});
-    })).then(function(rows){if(g!==generation)return rows;var seed=promoState&&promoState.items||cache[promoKey]||WePlayPromo.select({popular:rows[0],films:rows[1],series:rows[2]},WePlayCatalog.releaseYear(),12),artSeed=promoState?seed.slice(promoState.index).concat(seed.slice(0,promoState.index)):seed;return Promise.all([WePlayArtwork.prepare(artSeed,true,true,2),WePlayArtwork.prepare(rows[0],true,false,5)]).then(function(){return rows;});}).then(function(rows){
+      var key='home-'+spec[1];return cache[key]?Promise.resolve(cache[key]):news(spec[1],1,null,18,true).then(function(j){cache[key]=listOf(j);return cache[key];},function(){return null;});
+    })).then(function(rows){if(g!==generation)return rows;if(rows.every(function(row){return row===null;}))throw new Error('Каталоги сейчас недоступны. Попробуйте позже.');rows=rows.map(function(row){return row||[];});var seed=promoState&&promoState.items||cache[promoKey]||WePlayPromo.select({popular:rows[0],films:rows[1],series:rows[2]},WePlayCatalog.releaseYear(),12),artSeed=promoState?seed.slice(promoState.index).concat(seed.slice(0,promoState.index)):seed;return Promise.all([WePlayArtwork.prepare(artSeed,true,true,2),WePlayArtwork.prepare(rows[0],true,false,5)]).then(function(){return rows;});}).then(function(rows){
       if(g!==generation)return;loading.remove();
       var pool={popular:rows[0],films:rows[1],series:rows[2],cartoons:[]},promo=featured(promoState&&promoState.items||cache[promoKey]||WePlayPromo.select(pool,WePlayCatalog.releaseYear(),12),promoState?promoState.ready:!!cache[promoKey],promoState);content.appendChild(promo);
       function commitPromo(selected){var frozen=promo.updateItems(selected,true);if(frozen&&frozen.length)cache[promoKey]=frozen;}

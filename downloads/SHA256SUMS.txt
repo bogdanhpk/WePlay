@@ -6,3 +6,5 @@ e6de893141793d6ddfc39e78bc501cb748711f3b2b185684965d215ca8b8573d  WePlay-Tizen.w
 2111eee0222f3e8790e501050dfcb5fb9b609ece3bcf5782463facdb53410fed  WePlay-AndroidTV-1.0.4.apk
 2620c47f70a1d3bc190f7b1f95bcf8a5da13dd9bed1a784150a833c79ad01cbc  WePlay-AndroidTV-1.0.5.apk
 a24f8a038d1f9154cb07b3834349d7c4f504e27ccf1db60d5f085e1fb0f63b6d  app.weplay.tv_1.0.0_all.ipk
+9993a122d8711027ebfdc966e815ee7b18af89d4a6b53b0f9aa51782f5bd187e  WePlay-AndroidTV-1.0.6.apk
+57dc8d292c42b0ced7e935c2bbda9b799af060cb24ad6cde7e3253d73ae065ea  app.weplay.tv_1.0.1_all.ipk

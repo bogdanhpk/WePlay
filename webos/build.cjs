@@ -53,12 +53,6 @@ try {
   fs.writeFileSync(catalog, replaceRequired(fs.readFileSync(catalog, 'utf8'), 'function original(params,options){',
     "function original(params,options){\n    if(!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Каталог без ключа: используются другие источники.'));"));
 
-  const player = path.join(app, 'native-player.js');
-  let playerCode = fs.readFileSync(player, 'utf8');
-  playerCode = replaceRequired(playerCode, '    if(window.Hls&&Hls.isSupported()){',
-    "    var mp4=/\\.mp4(?:[?#]|$)/i.test(stream);\n    if(!mp4&&window.Hls&&Hls.isSupported()){");
-  playerCode = replaceRequired(playerCode, 'video.autoplay=false;video.src=stream;', 'video.autoplay=false;video.playsInline=true;video.src=mp4?WePlayWebOS.mediaURL(stream):stream;');
-  fs.writeFileSync(player, playerCode);
   fs.writeFileSync(path.join(app, 'settings.js'), "window.WEPLAY_SETTINGS = { apiToken: '', tmdbReadToken: '' };\n");
   fs.writeFileSync(path.join(app, 'index.html'), html);
 
