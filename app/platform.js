@@ -4,7 +4,7 @@
   var android = window.WePlayAndroid, lg = window.WePlayWebOS;
   var samsung = !android && !lg && window.tizen;
   var nativeForeground = true, foreground = !document.hidden;
-  var lastSamsungSource = '', lastSamsungBack = 0;
+  var SAMSUNG_BACK_GAP_MS = 350, lastSamsungBackSignal = -Infinity;
 
   function key(type, code, repeat) {
     var names = {13: 'Enter', 27: 'Escape', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown'};
@@ -17,12 +17,11 @@
     (document.activeElement || document).dispatchEvent(event);
   }
 
-  function samsungBack(source, event) {
-    if (event.repeat) return;
-    var now = Date.now();
-    if (lastSamsungSource !== source && now - lastSamsungBack < 180) return;
-    lastSamsungSource = source;
-    lastSamsungBack = now;
+  function samsungBack(event) {
+    // One remote press can produce a burst of keydown and tizenhwkey reports.
+    var now = performance.now(), previous = lastSamsungBackSignal;
+    lastSamsungBackSignal = now;
+    if (event.repeat || now - previous < SAMSUNG_BACK_GAP_MS) return;
     key('keydown', 27, false);
   }
 
@@ -31,7 +30,7 @@
     if (code !== 10009 && !(lg && code === 461)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (code === 10009) samsungBack('keydown', event);
+    if (code === 10009) samsungBack(event);
     else if (!event.repeat) key('keydown', 27, false);
   }, true);
 
@@ -39,7 +38,7 @@
     document.addEventListener('tizenhwkey', function (event) {
       if (event.keyName !== 'back') return;
       event.preventDefault();
-      samsungBack('tizenhwkey', event);
+      samsungBack(event);
     }, true);
 
     var input = samsung.tvinputdevice;
