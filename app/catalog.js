@@ -22,8 +22,9 @@
   function url(raw,base){try{var u=new URL(raw,base);return /^https?:$/.test(u.protocol)?u.href:'';}catch(ignore){return '';}}
   function catalogImage(node,base){if(!node)return'';var found='';['data-src','data-original','data-lazy-src','src','content'].some(function(key){var raw=node.getAttribute(key);if(!raw||/^(?:data|blob):/i.test(raw)||/(?:no[-_]?(?:image|poster|photo)|placeholder|spacer|blank|loading)[^/]*\.(?:gif|png|jpg|webp)/i.test(raw))return false;found=url(raw,base);return !!found;});return found;}
   function catalogBackdrop(doc,base,poster){
-    var image=catalogImage(doc.querySelector('meta[property="og:image"],meta[property="og:image:url"]'),base);
-    return image!==poster?image:'';
+    return list(doc,'meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],[itemprop="thumbnailUrl"],.screenshots img,.screens-list img').map(function(node){
+      return catalogImage(node,base);
+    }).filter(function(image,index,all){return image&&image!==poster&&all.indexOf(image)===index;}).slice(0,5);
   }
   function pageURL(raw,s){
     var rawURL=url(raw,s.base);if(!rawURL)return'';var candidate=new URL(rawURL),base=new URL(s.base);
@@ -109,7 +110,8 @@
       if(s.layout==='re')item.title=WePlayWebCatalog.cleanTitle(item.title);
       item.full_story=get(doc,s.id==='sb'?'.fdesc [itemprop="description"],.fdesc':'.lfs-intro__text,.page__text .full-text');
       var image=doc.querySelector(s.id==='sb'?'.fposter img':'.lfs-poster img,.page__poster img');x.image=catalogImage(image,s.base)||x.image;
-      x.backdrop=catalogBackdrop(doc,known._url,x.image)||x.backdrop;item._backdropParsed=true;
+      var backdrops=catalogBackdrop(doc,known._url,x.image);if(backdrops.length)x.backdrops=backdrops;
+      item._backdropParsed=2;
       x.year=fact(doc,'Год')||x.year;x.strana=fact(doc,'Страна');x.janre=s.id==='sb'?get(doc,'[itemprop="genre"]'):fact(doc,'Жанр');x.original_title=WePlayWebCatalog.originalTitle(doc,item.title,x.year)||x.original_title||'';
       x.quality=fact(doc,'Качество');x.director=get(doc,'[itemprop="director"]')||fact(doc,'Режиссёр');x.rolax=get(doc,'[itemprop="actors"]')||fact(doc,'В ролях');x.postproduction=fact(doc,'Перевод');
       var runtime=doc.querySelector('[itemprop="duration"]');x.duration=runtime&&(runtime.getAttribute('content')||runtime.getAttribute('datetime')||text(runtime))||fact(doc,'Продолжительность')||fact(doc,'Длительность')||fact(doc,'Время')||x.duration||'';
@@ -316,14 +318,20 @@
     });
   }
   function artwork(item){
-    if(item._source!=='pub')return Promise.resolve('');
     var variant=versions(item).filter(function(v){return v._source==='pub';})[0];if(!variant)return Promise.resolve('');
-    return detail(source('pub'),variant.id).then(function(j){var v=j.data._video;if(!v)return'';var q=new URLSearchParams({pub:v.publisher,id:v.titleId,aggr:v.aggregator});return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/playlist?'+q.toString(),true).then(function(p){var first=(p.items||[])[0];if(!first)return'';return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(first.vkId),true).then(function(video){return url(video.thumbUrl,'https://plapi.cdnvideohub.com/');});});}).catch(function(){return'';});
+    return rawDetail(variant,false).then(function(record){
+      if(!record._video)return '';
+      return playlist(record,4000).then(function(data){
+        var first=(data.items||[]).find(function(row){return !!row.vkId;});
+        if(!first)return '';
+        return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(first.vkId),true,'omit',4000).then(function(video){return url(video.thumbUrl,'https://plapi.cdnvideohub.com/');});
+      });
+    }).catch(function(){return '';});
   }
   function refreshBackdrops(item){
     return Promise.all(versions(item).map(function(record){
-      if(record._source==='primary'||!record._detail||record._backdropParsed)return record;
-      return rawDetail(record,false,true).catch(function(){return record;});
+      if(record._detail&&(record._source==='primary'||record._backdropParsed===2))return record;
+      return rawDetail(record,false,!!record._detail).catch(function(){return record;});
     }));
   }
   function checkSource(id){

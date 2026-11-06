@@ -122,7 +122,7 @@
     }};if(priority)queue.unshift(work);else queue.push(work);pump();});return pending[lookup];
   }
   function roleOf(wide,full){return wide?(full?'hero':'wide'):'poster';}
-  function spec(role){return role==='hero'?{width:2560,min:1280,height:0}:role==='wide'?{width:640,min:180,height:100}:role==='person'?{width:384,min:192,height:192}:{width:342,min:140,height:180};}
+  function spec(role){return role==='hero'?{width:2560,min:1280,height:0}:role==='wide'?{width:640,min:480,height:180}:role==='person'?{width:384,min:192,height:192}:{width:342,min:140,height:180};}
   function cardRole(role){return role==='wide'||role==='poster';}
   function isLandscape(value){var ratio=value.width/value.height;return ratio>=1.45&&ratio<=2.6;}
   function landscapeRole(role){return role==='hero'||role==='wide';}
@@ -190,7 +190,7 @@
     data=data||{};var indexed=window.WePlayTMDB&&WePlayTMDB.collectionBackdrop&&WePlayTMDB.collectionBackdrop(item);
     var background=data;
     if(!data.background&&!(data.backgrounds||[]).length&&window.WePlayTMDB&&WePlayTMDB.indexed)background=WePlayTMDB.indexed(item)||data;
-    var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((background.backgrounds||[]).concat([background.background,background.backgroundThumb,indexed],sourceImages(item,false,['background','backdrop','background_url','backdrop_url','fanart'])));
+    var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((background.backgrounds||[]).concat([background.background,background.backgroundThumb,indexed],sourceImages(item,false,['background','backgrounds','backdrop','backdrops','background_url','backdrop_url','fanart','screenshots'])));
     return{landscapes:landscapes,posters:posters,original:landscapes[0]||posters[0]||'',preview:landscapes[0]?candidates(landscapes[0],'wide')[0]:posters[0]?candidates(posters[0],'wide')[0]:'',poster:posters[0]?candidates(posters[0],'poster')[0]:'',source:background.backgroundSource||background.source||'catalog',creditURL:background.backgroundCredit||background.castPage||''};
   }
   function resourceFor(item,priority){
@@ -235,6 +235,25 @@
       return next().then(function(value){if(value)return value;return window.WePlayCatalog?WePlayCatalog.info(entry.item,true).then(function(full){entry.images.posters=uniqueImages(entry.images.posters.concat(sourceImages(full,false)));originals=entry.images.posters;return next();}).catch(function(){return null;}):null;});
     });return entry.posterTask;
   }
+  function firstAvailable(tasks){
+    return new Promise(function(resolve){
+      var remaining=tasks.length;
+      function done(value){if(value||--remaining===0)resolve(value||null);}
+      tasks.forEach(function(task){task.then(done,function(){done(null);});});
+    });
+  }
+  function backdropDetails(entry){
+    if(!window.WePlayCatalog||!WePlayCatalog.refreshBackdrops)return Promise.resolve(entry.item);
+    if(!entry.backdropRefresh)entry.backdropRefresh=metadataTask('catalog-backdrop:'+entry.key,function(){
+      return WePlayCatalog.refreshBackdrops(entry.item);
+    },false).then(function(records){
+      var current=WePlayCatalog.find(entry.item.id)||entry.item;
+      var updated=Object.assign({},current,{_alternatives:records});
+      mergeImages(entry,normalizedImages(updated,entry.metadata));
+      return updated;
+    }).catch(function(){return entry.item;});
+    return entry.backdropRefresh;
+  }
   function selectLandscape(entry,role){
     var hero=role==='hero',tried=[],fallback=null;
     function landscape(originals,source,creditURL){
@@ -258,21 +277,30 @@
       }}).then(function(value){return value?selected(value):null;});
     }
     function listed(){return landscape(entry.images.landscapes,entry.images.source,entry.images.creditURL);}
+    function catalog(item){return landscape(uniqueImages(sourceImages(item,false)),'catalog-poster');}
+    function alternatives(item){
+      var tasks=[];
+      if(!entry.alternateBackdropTask)entry.alternateBackdropTask=metadataTask('cinemeta-backdrop:'+entry.key,function(){
+        return entry.metadata&&entry.metadata.source==='Cinemeta'?null:cinemeta(item,entry.metadata);
+      },false).catch(function(){return null;});
+      tasks.push(entry.alternateBackdropTask.then(function(data){return data?landscape(data.backgrounds,'Cinemeta'):null;}));
+      if(WePlayCatalogUnion.kind(item)==='series'){
+        if(!entry.mazeBackdropTask)entry.mazeBackdropTask=tvmaze(item,entry.metadata);
+        tasks.push(entry.mazeBackdropTask.then(function(data){return data?landscape(data.backgrounds,'TVmaze',data.backgroundCredit):null;}));
+      }
+      if(window.WePlayCatalog&&WePlayCatalog.artwork){
+        if(!entry.videoBackdropTask)entry.videoBackdropTask=metadataTask('video-backdrop:'+entry.key,function(){return WePlayCatalog.artwork(item);},false);
+        tasks.push(entry.videoBackdropTask.then(function(frame){return frame?landscape([frame],'catalog'):null;}));
+      }
+      return firstAvailable(tasks);
+    }
     return listed().then(function(value){
-      return value||entry.metadataTask.then(listed);
-    }).then(function(value){
-      if(value||!entry.item._detail||!window.WePlayCatalog||!WePlayCatalog.refreshBackdrops)return value;
-      if(!entry.backdropRefresh)entry.backdropRefresh=WePlayCatalog.refreshBackdrops(entry.item).then(function(records){
-        var updated=Object.assign({},entry.item,{_alternatives:records});
-        mergeImages(entry,normalizedImages(updated,entry.metadata));
-      });
-      return entry.backdropRefresh.then(listed);
-    }).then(function(value){
-      return value||landscape(uniqueImages(sourceImages(entry.item,false)),'catalog-poster');
-    }).then(function(value){
-      if(value||!hero&&!entry.item._detail||entry.metadata&&entry.metadata.source==='Cinemeta')return value;
-      if(!entry.alternateBackdropTask)entry.alternateBackdropTask=metadataTask('backdrop:'+entry.key,function(){return cinemeta(entry.item,entry.metadata);}).catch(function(){return null;});
-      return entry.alternateBackdropTask.then(function(data){return data?landscape(data.backgrounds,'Cinemeta'):null;});
+      if(value)return value;
+      return firstAvailable([entry.metadataTask.then(listed),catalog(entry.item),entry.ready.then(function(){
+        return backdropDetails(entry).then(function(full){
+          return listed().then(function(found){return found||catalog(full);}).then(function(found){return found||alternatives(full);});
+        });
+      })]);
     }).then(function(selection){
       selection=selection||fallback;
       if(!selection)return null;
@@ -345,7 +373,11 @@
   }
   function prefetch(items,wide,full,count){return Promise.all((items||[]).slice(0,count||items.length).map(function(item){return asset(item,roleOf(wide,full),!!full);}));}
   function prepare(items,wide,full,count){return Promise.race([prefetch(items,wide,full,count),new Promise(function(resolve){setTimeout(resolve,1400);})]);}
-  function metadataTask(key,run){return new Promise(function(resolve,reject){queue.unshift({key:key,run:function(){return Promise.resolve().then(run).then(resolve,reject);}});pump();});}
+  function metadataTask(key,run,priority){return new Promise(function(resolve,reject){
+    var job={key:key,run:function(){return Promise.resolve().then(run).then(resolve,reject);}};
+    if(priority===false)queue.push(job);else queue.unshift(job);
+    pump();
+  });}
   function refreshMetadata(item){
     var key=itemKey(item);if(metadataPending[key])return metadataPending[key];
     metadataPending[key]=metadataTask('details:'+key,function(){var entry=saved(item),art=entry&&entry.data,page=art&&art.castPage,known=/^https:\/\/www\.themoviedb\.org\/(movie|tv)\/\d+(?:[/?-]|$)/.test(page||'');return known?fetchValue(page,false).then(function(html){return profileMetadata(html,page);}):tmdb(item);}).then(function(fresh){
