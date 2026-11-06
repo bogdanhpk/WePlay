@@ -1,6 +1,6 @@
 {
   "id": "app.weplay.tv",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "vendor": "WePlay",
   "type": "web",
   "main": "index.html",

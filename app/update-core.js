@@ -7,7 +7,7 @@
   function version(value){return typeof value==='string'&&/^\d{1,3}\.\d{1,3}\.\d{1,4}$/.test(value);}
   function sequence(v){if(!version(v))return fail('Invalid version');var n=v.split('.').map(Number);return n[0]*100000000+n[1]*10000+n[2];}
   function path(value){return typeof value==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}$/.test(value)&&value.split('/').every(function(p){return p&&p!=='.'&&p!=='..';});}
-  function allowedFile(name){return path(name)&&(/^[a-z0-9-]+\.(?:js|css)$/.test(name)&&! /^(?:settings|update-config|update-core|updater)\.js$/.test(name)||name==='vendor/hls.min.js'||/^(?:assets|fonts)\/[a-zA-Z0-9_./-]+\.(?:png|jpg|jpeg|webp|svg|ttf|woff2?)$/.test(name));}
+  function allowedFile(name){return path(name)&&(/^[a-z0-9-]+\.(?:js|css)$/.test(name)&&! /^(?:settings|update-config|update-core|updater|android|webos)\.js$/.test(name)||name==='vendor/hls.min.js'||/^(?:assets|fonts)\/[a-zA-Z0-9_./-]+\.(?:png|jpg|jpeg|webp|svg|ttf|woff2?)$/.test(name));}
   function base64(value){if(typeof value!=='string'||value.length>MAX_BUNDLE*2||! /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value))return fail('Invalid binary data');var raw=atob(value),out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out;}
   function text(value){return new TextEncoder().encode(value);}
   function hex(bytes){return Array.prototype.map.call(new Uint8Array(bytes),function(v){return ('0'+v.toString(16)).slice(-2);}).join('');}
@@ -19,7 +19,7 @@
       return crypto.subtle.importKey('jwk',config.publicKey,{name:'ECDSA',namedCurve:'P-256'},false,['verify']).then(function(key){return crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},key,signature,text(envelope.signed));});
     }).then(function(valid){
       if(!valid)return fail('Update signature rejected');var m=JSON.parse(envelope.signed);
-      if(!plain(m)||m.schema!==1||m.app!==APP||m.channel!==config.channel||!version(m.version)||m.sequence!==sequence(m.version)||!Number.isSafeInteger(m.sequence)||m.sequence<config.bundledSequence||(!Number.isInteger(m.minShell)||m.minShell<1||m.minShell>config.shell))return fail('Incompatible update');
+      if(!plain(m)||m.schema!==1||m.app!==(config.app||APP)||m.channel!==config.channel||!version(m.version)||m.sequence!==sequence(m.version)||!Number.isSafeInteger(m.sequence)||m.sequence<config.bundledSequence||(!Number.isInteger(m.minShell)||m.minShell<1||m.minShell>config.shell))return fail('Incompatible update');
       if(!plain(m.payload)||!path(m.payload.path)||!/^releases\//.test(m.payload.path)||! /^[a-f0-9]{64}$/.test(m.payload.sha256)||!Number.isInteger(m.payload.bytes)||m.payload.bytes<1||m.payload.bytes>MAX_BUNDLE)return fail('Invalid update payload');
       return m;
     });
@@ -38,9 +38,30 @@
     return verify(record.envelope,config).then(function(m){var bytes=text(record.body);if(bytes.length!==m.payload.bytes)return fail('Incomplete update');return digest(bytes).then(function(hash){if(hash!==m.payload.sha256)return fail('Update checksum rejected');return{manifest:m,bundle:validateBundle(JSON.parse(record.body),m),record:record};});});
   }
   function url(manifestURL,m){var base=new URL(manifestURL),u=new URL(m.payload.path,base);if(base.protocol!=='https:'||u.origin!==base.origin||!u.pathname.startsWith(base.pathname.slice(0,base.pathname.lastIndexOf('/')+1)))return fail('Update URL rejected');return u.href;}
+  function readResponse(response,maxBytes,abort){
+    var reader=response.body&&response.body.getReader&&response.body.getReader();
+    if(!reader)return response.arrayBuffer().then(function(buffer){
+      if(buffer.byteLength>maxBytes)return fail('Update download too large');
+      return new TextDecoder('utf-8',{fatal:true}).decode(buffer);
+    });
+    var received=0,parts=[],decoder=new TextDecoder('utf-8',{fatal:true});
+    function next(){
+      return reader.read().then(function(chunk){
+        if(chunk.done){parts.push(decoder.decode());return parts.join('');}
+        received+=chunk.value.byteLength;
+        if(received>maxBytes){abort.abort();return fail('Update download too large');}
+        parts.push(decoder.decode(chunk.value,{stream:true}));
+        return next();
+      });
+    }
+    return next();
+  }
   function request(url,maxBytes,timeout){
     var abort=new AbortController(),timer=setTimeout(function(){abort.abort();},timeout);
-    return fetch(url,{credentials:'omit',cache:'no-store',signal:abort.signal}).then(function(r){if(!r.ok||r.headers.get('content-length')&&Number(r.headers.get('content-length'))>maxBytes)return fail('Update download unavailable');return r.arrayBuffer();}).then(function(buffer){if(buffer.byteLength>maxBytes)return fail('Update download too large');return new TextDecoder('utf-8',{fatal:true}).decode(buffer);}).finally(function(){clearTimeout(timer);});
+    return fetch(url,{credentials:'omit',cache:'no-store',signal:abort.signal}).then(function(r){
+      if(!r.ok||Number(r.headers.get('content-length'))>maxBytes){abort.abort();return fail('Update download unavailable');}
+      return readResponse(r,maxBytes,abort);
+    }).finally(function(){clearTimeout(timer);});
   }
   window.WePlayUpdateCore={verify:verify,release:release,validateBundle:validateBundle,url:url,request:request,digest:digest,bytes:text,base64:base64,sequence:sequence,allowedFile:allowedFile,MAX_BUNDLE:MAX_BUNDLE,MAX_MANIFEST:MAX_MANIFEST};
 }());
