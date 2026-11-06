@@ -36,11 +36,45 @@
   var preview=null,seekRun=0,lastSeekKeyAt=0,menuClose=null,menuShade=null,qualityPreference=0,selectedQuality=0,bufferTimer=null,pointerCleanup=null;
   var runningEpisode=null,started=false,runningEnded=false,resumeTarget=0,lastSavedAt=0;
   var postplay=null,postplayDismissals={},postplayAutoplay=true,remoteSeekKey=0;
+  var recoveryTimer=null,stallTimer=null,recoveryAttempts=0,failedResolutions=[];
   try{audioPreference=localStorage.getItem('lord.audioPreference')||'';}catch(ignore){}
   try{qualityPreference=Number(localStorage.getItem('lord.quality.v1'))||0;}catch(ignore){}
   function put(node,value){if(node&&node.textContent!==value)node.textContent=value;}
   function report(t,d){if(options&&options.log)options.log(t,d);}
   function error(message){saveProgress(true);clearTimeout(prepareTimer);clearTimeout(bufferTimer);if(preview){wantsPlay=preview.playing;preview=null;}if(pointerCleanup)pointerCleanup();if(seekBubble)seekBubble.hidden=true;closeMenu(false);failed=true;loading=false;if(options){options.status.textContent=message;report('nativeError',message);barSelection='native-retry';show(true);}}
+  function androidFailure(token,reason){
+    if(token!==request||failed||recoveryTimer!==null)return;
+    clearTimeout(stallTimer);
+    var canRecover=wantsPlay&&!suspended&&!preview&&WePlayTV.isForeground()&&recoveryAttempts<2;
+    if(canRecover){
+      var position=resumeTarget||(started&&video&&isFinite(video.currentTime)?video.currentTime*1000:currentTime);
+      if(reason==='decode'&&hls){
+        var height=WePlayQuality.height(currentResolution());
+        if(height&&failedResolutions.indexOf(height)<0)failedResolutions.push(height);
+      }
+      recoveryAttempts++;
+      recoveryTimer=setTimeout(function(){
+        recoveryTimer=null;
+        if(token!==request||failed)return;
+        if(wantsPlay&&!suspended&&!preview&&WePlayTV.isForeground()){
+          report('androidPlaybackRecovery',reason+' '+recoveryAttempts);
+          startEpisode(position,true,null,true);
+        }else playbackFailure();
+      },0);
+    }else playbackFailure();
+    function playbackFailure(){
+      if(hls)hls.stopLoad();
+      pauseEngine();
+      error('Не удалось воспроизвести видео. Попробуйте ещё раз или смените озвучку.');
+    }
+  }
+  function watchAndroidBuffer(token){
+    if(WePlayTV.name!=='android')return;
+    clearTimeout(stallTimer);
+    stallTimer=setTimeout(function(){
+      if(token===request&&loading&&wantsPlay&&!suspended&&!preview&&WePlayTV.isForeground())androidFailure(token,'buffer');
+    },18000);
+  }
   function state(){try{return api?api.getState():(video?(video.paused?'PAUSED':'PLAYING'):'NONE');}catch(ignore){return 'NONE';}}
   function encodedUrl(raw){
     if(options&&options.transport==='plain')return raw;
@@ -93,7 +127,7 @@
     saveProgress(true);runningEpisode=null;started=false;
     if(postplay){postplay.destroy();postplay=null;}
     document.body.classList.remove('avplay-active');
-    clearTimeout(prepareTimer);clearTimeout(bufferTimer);preview=null;remoteSeekKey=0;if(pointerCleanup)pointerCleanup();
+    clearTimeout(prepareTimer);clearTimeout(bufferTimer);clearTimeout(stallTimer);clearTimeout(recoveryTimer);recoveryTimer=null;preview=null;remoteSeekKey=0;if(pointerCleanup)pointerCleanup();
     if(hls){hls.destroy();hls=null;}
     if(api){try{if(['PLAYING','PAUSED','READY'].indexOf(api.getState())>=0)api.stop();api.close();}catch(ignore){}}
     if(video){video.pause();video.removeAttribute('src');video.load();video=null;}
@@ -111,6 +145,7 @@
         var playing=video.play();
         if(playing&&playing.catch)playing.catch(function(e){
           if(token!==request||!wantsPlay||e.name==='AbortError')return;
+          if(WePlayTV.name==='android'&&e.name!=='NotAllowedError'){androidFailure(token,video&&video.error&&video.error.code===3?'decode':'network');return;}
           error(e.name==='NotAllowedError'?'Нажмите «Продолжить» для запуска видео.':'Не удалось запустить видео. Попробуйте ещё раз.');
         });
       }
@@ -206,7 +241,26 @@
   function chooseAudio(){
     var tracks=audioOptions();
     if(!tracks.length){show();options.status.textContent='Дополнительных звуковых дорожек нет';setTimeout(function(){if(active)options.status.textContent='';},2500);return;}
-    choose('Озвучка',tracks.map(function(t){return{label:t.label,value:t.index,active:t.index===audioSelection()};}),function(i){var previous=audioSelection();audioIndex=i;var selected=tracks.filter(function(t){return t.index===i;})[0];audioPreference=selected.label;try{localStorage.setItem('lord.audioPreference',audioPreference);}catch(ignore){}if(i===previous){show(true);return;}if(options.resolveEpisode){var position=currentTime,playing=wantsPlay;startEpisode(position,playing,'native-audio');report('audioSelected',audioPreference);return;}try{if(hls)hls.audioTrack=i;else if(api)api.setSelectTrack('AUDIO',i);else if(video.audioTracks){for(var n=0;n<video.audioTracks.length;n++)video.audioTracks[n].enabled=n===i;}report('audioSelected',audioPreference);}catch(e){error('Не удалось переключить озвучку. Попробуйте другую дорожку.');}show(true);});
+    choose('Озвучка',tracks.map(function(t){return{label:t.label,value:t.index,active:t.index===audioSelection()};}),function(i){
+      var previous=audioSelection();
+      audioIndex=i;
+      audioPreference=tracks.filter(function(t){return t.index===i;})[0].label;
+      try{localStorage.setItem('lord.audioPreference',audioPreference);}catch(ignore){}
+      var restartFailed=failed&&WePlayTV.name==='android';
+      if(i===previous&&!restartFailed){show(true);return;}
+      if(options.resolveEpisode||restartFailed){
+        startEpisode(resumeTarget||currentTime,wantsPlay,'native-audio');
+        report('audioSelected',audioPreference);
+        return;
+      }
+      try{
+        if(hls)hls.audioTrack=i;
+        else if(api)api.setSelectTrack('AUDIO',i);
+        else if(video.audioTracks){for(var n=0;n<video.audioTracks.length;n++)video.audioTracks[n].enabled=n===i;}
+        report('audioSelected',audioPreference);
+      }catch(e){error('Не удалось переключить озвучку. Попробуйте другую дорожку.');}
+      show(true);
+    });
   }
   function audioSelection(){return options&&options.resolveEpisode?audioIndex:hls&&hls.audioTrack>=0?hls.audioTrack:audioIndex;}
   function currentResolution(){
@@ -249,11 +303,12 @@
     tracks.forEach(function(track,index){choices.push({label:track.name||track.lang||'Дорожка '+(index+1),value:index,active:hls.subtitleTrack===index});});
     choose('Субтитры',choices,function(index){hls.subtitleTrack=index;hls.subtitleDisplay=index>=0;showSettings('subtitles');report('subtitlesSelected',index);},function(){showSettings('subtitles');},{kind:'subtitles'});
   }
-  function startEpisode(position,playing,focusId){
+  function startEpisode(position,playing,focusId,recovering){
     var token=++request,e=episodes[episodeIndex];position=typeof position==='number'?position:0;stopEngine();closeMenu(false);currentTime=position;totalTime=0;failed=false;loading=true;audioIndex=0;selectedQuality=0;wantsPlay=playing!==false&&WePlayTV.isForeground();
+    if(!recovering){recoveryAttempts=0;failedResolutions=[];}
     runningEpisode=e;runningEnded=false;resumeTarget=position;lastSavedAt=0;postplayAutoplay=true;
     if(options.resolveEpisode){audioIndex=0;(e.variants||[]).some(function(v,i){if(v.label===audioPreference){audioIndex=i;return true;}return false;});}
-    options.status.textContent='Загружаем видео…';options.surface.innerHTML='';
+    options.status.textContent=recovering?'Восстанавливаем воспроизведение…':'Загружаем видео…';options.surface.innerHTML='';
     options.hint.textContent='OK или ↑ — управление · ← → — перемотка на 10 с · Назад — выйти';
     makeBar();barSelection=focusId||'native-toggle';controlsFocused=!!focusId;show(!!focusId);if(!suspended&&!focusId)document.getElementById('player').focus();
     var following=followingEpisode(episodeIndex),currentIndex=episodeIndex,serial=options.mediaKind==='series'||options.mediaKind!=='movie'&&!!e.season;
@@ -267,7 +322,8 @@
       onDismiss:function(){postplayDismissals[currentIndex]=true;},
       onWatch:function(next){saveProgress(true,true);runningEnded=true;if(next.kind==='episode'){episodeIndex=currentIndex+1;startEpisode(0,true);report('postplayEpisode',episodeIndex);}else if(options.onNextMedia)options.onNextMedia(next.item);}
     });
-    if(options.resolveEpisode){options.resolveEpisode(e,audioIndex).then(function(stream){if(token===request)startEngine(token,stream,position);}).catch(function(err){if(token===request)error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');});}
+    watchAndroidBuffer(token);
+    if(options.resolveEpisode){options.resolveEpisode(e,audioIndex).then(function(stream){if(token===request&&!failed)startEngine(token,stream,position);}).catch(function(err){if(token===request&&!failed){if(WePlayTV.name==='android')androidFailure(token,'source');else error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');}});}
     else startEngine(token,e.hls,position);
   }
   function startEngine(token,stream,position){
@@ -276,13 +332,31 @@
     if(!mp4&&window.Hls&&Hls.isSupported()){
       var media=createVideo(token,0,true);
       hls=new Hls({loader:ProviderLoader,enableWorker:false,debug:false,startLevel:0,startPosition:position/1000,capLevelToPlayerSize:true,backBufferLength:20,maxBufferLength:30,maxMaxBufferLength:60});
-      hls.on(Hls.Events.MANIFEST_PARSED,function(ev,data){if(token!==request)return;report('hlsReady',data.levels.length);if(qualityPreference){var chosen=WePlayQuality.preferred(qualityLevels(),qualityPreference);if(chosen){hls.nextLevel=chosen.index;selectedQuality=chosen.height;}}if(hls.subtitleTracks&&hls.subtitleTracks.length)hls.subtitleTrack=-1;tick(currentTime);if(wantsPlay)play();});
+      hls.on(Hls.Events.MANIFEST_PARSED,function(ev,data){
+        if(token!==request||failed)return;
+        report('hlsReady',data.levels.length);
+        var levels=qualityLevels(),chosen=WePlayQuality.preferred(levels,qualityPreference);
+        if(failedResolutions.length){
+          var usable=levels.filter(function(level){return failedResolutions.indexOf(level.height)<0;});
+          chosen=WePlayQuality.preferred(usable,qualityPreference||480)||chosen;
+        }
+        if(chosen){if(WePlayTV.name==='android')hls.startLevel=chosen.index;hls.nextLevel=chosen.index;selectedQuality=chosen.height;}
+        if(hls.subtitleTracks&&hls.subtitleTracks.length)hls.subtitleTrack=-1;
+        tick(currentTime);if(wantsPlay)play();
+      });
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED,function(){if(token!==request||!audioPreference||options.resolveEpisode)return;var selected=audioOptions().filter(function(t){return t.label===audioPreference;})[0];if(selected)hls.audioTrack=selected.index;});
       hls.on(Hls.Events.AUDIO_TRACK_SWITCHED,function(ev,data){if(token===request){updateControls();report('audioSwitched',data.id);}});
       if(Hls.Events.LEVEL_SWITCHED)hls.on(Hls.Events.LEVEL_SWITCHED,function(){if(token===request)updateControls();});
       if(Hls.Events.LEVELS_UPDATED)hls.on(Hls.Events.LEVELS_UPDATED,function(){if(token===request){updateControls();if(menu&&menu.getAttribute('data-menu-kind')==='quality')chooseQuality();}});
       if(Hls.Events.SUBTITLE_TRACKS_UPDATED)hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED,function(){if(token===request)updateControls();});
-      hls.on(Hls.Events.ERROR,function(ev,data){if(token!==request)return;report('hlsEvent',data.details+(data.response?' HTTP '+data.response.code:''));if(data.fatal){error('Не удалось загрузить видео. Попробуйте ещё раз.');}});
+      hls.on(Hls.Events.ERROR,function(ev,data){
+        if(token!==request||failed)return;
+        report('hlsEvent',data.details+(data.response?' HTTP '+data.response.code:''));
+        if(data.fatal){
+          if(WePlayTV.name==='android')androidFailure(token,data.type===Hls.ErrorTypes.MEDIA_ERROR?'decode':'network');
+          else error('Не удалось загрузить видео. Попробуйте ещё раз.');
+        }
+      });
       hls.attachMedia(media);hls.loadSource(raw);report('nativeStarted','HLS in application');
     }else if(window.webapis&&webapis.avplay){
       document.body.classList.add('avplay-active');
@@ -325,7 +399,8 @@
     listen('pause',function(){saveProgress(true);});
     listen('timeupdate',function(){tick(media.currentTime*1000);});
     listen('playing',function(){
-      if(!WePlayTV.isForeground()||!wantsPlay||suspended||preview){pauseEngine();return;}
+      if(failed||!WePlayTV.isForeground()||!wantsPlay||suspended||preview){pauseEngine();return;}
+      clearTimeout(stallTimer);
       clearTimeout(bufferTimer);loading=false;failed=false;currentTime=media.currentTime*1000;
       playbackStarted();options.status.textContent='';updateControls();armHide();
       report('videoPlaying',media.videoWidth+'x'+media.videoHeight);
@@ -333,10 +408,16 @@
     listen('waiting',function(){
       if(!wantsPlay||suspended||preview)return;
       loading=true;updateControls();armHide();clearTimeout(bufferTimer);
+      watchAndroidBuffer(token);
       bufferTimer=setTimeout(function(){if(token===request&&loading&&wantsPlay&&!suspended&&!preview)options.status.textContent='Буферизация…';},600);
     });
     listen('ended',function(){if(!suspended)completed();});
-    if(!managed)listen('error',function(){error('Не удалось загрузить видео. Попробуйте ещё раз.');});
+    listen('error',function(){
+      if(WePlayTV.name==='android'&&media.error&&media.error.code!==1){
+        report('androidMediaError',media.error.code);
+        androidFailure(token,media.error.code===3?'decode':'network');
+      }else if(!managed)error('Не удалось загрузить видео. Попробуйте ещё раз.');
+    });
     options.surface.appendChild(media);
     return media;
   }
