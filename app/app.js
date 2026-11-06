@@ -149,13 +149,13 @@
     var row=element('div','metadata');[xf(item,'year'),genres(item).slice(0,2).join(' · '),xf(item,'strana')].filter(Boolean).forEach(function(value){row.appendChild(element('span','meta-part',text(value)));});
     ['quality','age'].forEach(function(key){var value=text(xf(item,key));if(value)row.appendChild(element('span','media-tag',value));});return row;
   }
-  function card(item,suffix,portrait) {
+  function card(item,suffix) {
     WePlayCatalog.remember(item);
     cache['item-'+item.id]=item;
     var b=button('','movie-card',function(){push({kind:'detail',id:item.id});},'movie-'+item.id+(suffix?'-'+suffix:''));
     b._weplayItem=item;
     b.setAttribute('aria-label',text(item.title));b.setAttribute('data-content-id',item.id);var wrap=element('div','poster-wrap'),img=element('img');
-    img.alt=text(item.title);wrap.appendChild(img);WePlayArtwork.observe(img,item,portrait?'poster':'preview');
+    img.alt=text(item.title);wrap.appendChild(img);WePlayArtwork.observe(img,item,'preview');
     wrap.appendChild(ratings(item,'card'));b.appendChild(wrap);
     b.appendChild(element('div','movie-title',text(item.title)));
     var progress=WePlayProgress.get(item),continuing=suffix==='home-continue'&&WePlayProgress.canResume(progress);
@@ -174,7 +174,7 @@
     else{var next=section.nextElementSibling;section.remove();if(!railFocus(next))focus(document.getElementById('featured-open')||document.getElementById('home-menu'));}
     toast('Убрано из просмотра. Прогресс сброшен');
   }
-  function gridOf(items,suffix,portrait,reuse) {var g=element('div','grid'+(portrait?' poster-grid':''));g.setAttribute('data-focus-grid',portrait?'6':'4');items.forEach(function(i){var existing=reuse&&reuse[WePlayCatalogUnion.canonical(i.id)];if(existing){existing.id='movie-'+i.id+(suffix?'-'+suffix:'');existing.setAttribute('data-content-id',i.id);g.appendChild(existing);}else g.appendChild(card(i,suffix,portrait));});return g;}
+  function gridOf(items,suffix,reuse) {var g=element('div','grid');g.setAttribute('data-focus-grid','4');items.forEach(function(i){var existing=reuse&&reuse[WePlayCatalogUnion.canonical(i.id)];if(existing){existing.id='movie-'+i.id+(suffix?'-'+suffix:'');existing.setAttribute('data-content-id',i.id);g.appendChild(existing);}else g.appendChild(card(i,suffix));});return g;}
   function imageNodes(root){var map={};root.querySelectorAll('.movie-card').forEach(function(card){map[WePlayCatalogUnion.canonical(card.getAttribute('data-content-id'))]=card;});return map;}
   function restoreRailState(rail,route,index){
     var states=route.rails||[],saved=states.filter(function(state){return state.id===rail.id;})[0]||(states[index]&&!states[index].id?states[index]:null);if(!saved)return;
@@ -384,7 +384,7 @@
       var found=state.items.filter(function(i){return Object.keys(state.filters).every(function(k){var v=state.filters[k];if(!v)return true;
         if(k==='rating')return (score(i,'kp_rating')||score(i,'imdb_rating')||0)>=Number(v);
         return xf(i,k).toLowerCase().indexOf(v.toLowerCase())>=0;});});
-      results.appendChild(found.length?gridOf(found,null,false,reuse):emptyBox(isReleases?'Премьеры '+WePlayCatalog.releaseYear()+' года пока не найдены. Смените фильтры или загрузите ещё.':'Смените фильтры или загрузите ещё фильмы.'));
+      results.appendChild(found.length?gridOf(found,null,reuse):emptyBox(isReleases?'Премьеры '+WePlayCatalog.releaseYear()+' года пока не найдены. Смените фильтры или загрузите ещё.':'Смените фильтры или загрузите ещё фильмы.'));
       footer.innerHTML='';footer.appendChild(element('p','count','Загружено '+state.items.length+(typeof state.total==='number'?' из '+state.total:'')));
       if(state.more)footer.appendChild(button('Загрузить ещё','secondary',loadMore,'load-more'));
       if(activeId)focus(document.getElementById(activeId));
@@ -470,7 +470,7 @@
       if(state.short)note.textContent='Введите ещё символ или нажмите «Найти».';else if(state.pending&&all.length)note.textContent='Ищем во всех источниках…';else if(state.partial&&all.length)note.textContent=state.cached?'Источники не ответили. Показаны сохранённые результаты.':'Часть источников не ответила. Показаны доступные результаты.';else if(state.cancelled&&!all.length)note.textContent='Нажмите «Найти», чтобы выполнить новый поиск.';
       note.hidden=!note.textContent;results.appendChild(note);
       var list=element('div');list.id='search-result-list';list.setAttribute('role','tabpanel');list.setAttribute('aria-labelledby','search-filter-'+filter);list.setAttribute('aria-busy',String(!!state.pending));results.appendChild(list);
-      if(found.length){var cards=gridOf(found.slice(0,limit),null,false,reuse);cards.setAttribute('data-focus-grid','3');list.appendChild(cards);if(found.length>limit){var footer=element('div','load-more');footer.appendChild(button('Показать ещё','secondary',function(){var from=document.activeElement.id==='load-more',next=found[limit];route.searchLimit=limit+36;draw();if(from&&next)focus(document.getElementById('movie-'+next.id));},'load-more'));list.appendChild(footer);}}
+      if(found.length){var cards=gridOf(found.slice(0,limit),null,reuse);cards.setAttribute('data-focus-grid','3');list.appendChild(cards);if(found.length>limit){var footer=element('div','load-more');footer.appendChild(button('Показать ещё','secondary',function(){var from=document.activeElement.id==='load-more',next=found[limit];route.searchLimit=limit+36;draw();if(from&&next)focus(document.getElementById('movie-'+next.id));},'load-more'));list.appendChild(footer);}}
       else if(!state.pending&&!state.cancelled){
         var message=state.error||state.failed&&state.failed.length&&!(state.sources||[]).length?'Не удалось выполнить поиск. Проверьте подключение и попробуйте ещё раз.':filter!=='all'&&all.length?'В этом разделе ничего нет. Выберите «Все».':state.partial?'В доступных каталогах ничего не найдено. Часть источников не ответила.':'По этому названию ничего не найдено. Проверьте написание или введите часть названия.';
         list.appendChild(emptyBox(message));
@@ -486,13 +486,13 @@
   }
   function searchHistory(){try{var list=JSON.parse(localStorage.getItem('lord.search-history.v1')||'[]');return Array.isArray(list)?list.filter(function(q){return typeof q==='string'&&q.length<=160;}).slice(0,8):[];}catch(ignore){return [];}}
   function favoritesPage(){
-    var route=current,all=favorites(),view=content;header('Избранное',all.length?'Сохранено: '+all.length:'Ваша коллекция фильмов и сериалов');
+    var route=current,all=favorites();header('Избранное',all.length?'Сохранено: '+all.length:'Ваша коллекция фильмов и сериалов');
     if(!all.length){var empty=emptyBox('Добавьте фильм или сериал с помощью кнопки с плюсом.');empty.querySelector('h2').textContent='Сохраните на потом';empty.appendChild(iconButton('Найти фильм','magnifying-glass','primary',function(){push({kind:'search'});},'favorites-search'));content.appendChild(empty);return Promise.resolve();}
     var tabs=element('div','library-toolbar'),results=element('div');route.sort=route.sort||'recent';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Сортировка избранного');
     [['recent','Недавно добавленные'],['title','По названию'],['rating','По рейтингу']].forEach(function(spec){var b=button(spec[1],'library-tab',function(){route.sort=spec[0];draw();focus(b);},'favorites-'+spec[0]);b.setAttribute('role','tab');tabs.appendChild(b);});content.appendChild(tabs);content.appendChild(results);
     function draw(){var list=all.slice(),reuse=imageNodes(results);if(route.sort==='title')list.sort(function(a,b){return text(a.title).localeCompare(text(b.title),'ru');});if(route.sort==='rating')list.sort(function(a,b){return (score(b,'kp_rating')||score(b,'imdb_rating')||0)-(score(a,'kp_rating')||score(a,'imdb_rating')||0);});
-      tabs.querySelectorAll('button').forEach(function(b){var selected=b.id==='favorites-'+route.sort;b.classList.toggle('selected',selected);b.setAttribute('aria-selected',String(selected));});results.innerHTML='';results.appendChild(gridOf(list,null,true,reuse));}
-    var loading=pageLoader('Загружаем избранное');return WePlayArtwork.prepare(all,false,false,6).then(function(){if(view===content)draw();}).finally(function(){loading.remove();});
+      tabs.querySelectorAll('button').forEach(function(b){var selected=b.id==='favorites-'+route.sort;b.classList.toggle('selected',selected);b.setAttribute('aria-selected',String(selected));});results.innerHTML='';results.appendChild(gridOf(list,null,reuse));}
+    draw();return Promise.resolve();
   }
   function collections(g) {
     header('Подборки','Истории под настроение');var loading=pageLoader('Загружаем подборки');

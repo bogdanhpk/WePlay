@@ -10,9 +10,6 @@
 .grid:not(.home-rail) .poster-wrap{height:226px;border-radius:12px}
 .grid:not(.home-rail) .poster-wrap img{object-position:50% 32%}
 .grid:not(.home-rail) .movie-title{font-size:24px;line-height:32px;padding-top:16px}
-.grid.poster-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
-.grid.poster-grid .poster-wrap{height:392px}
-.grid.poster-grid .movie-title{font-size:20px;line-height:28px}
 .movie-meta{color:#a0a0a0}
 .movie-card{align-self:start}
 .poster-wrap .ratings-card{position:absolute;top:12px;left:12px;right:12px;margin:0;z-index:1}

@@ -258,5 +258,4 @@ button:disabled:active{transform:none}
 
 @media(prefers-reduced-motion:reduce){.featured-dots .featured-progress{transition:none}}
 .featured-art:not(.artwork-backdrop-ready),.home-rail .poster-wrap:not(.artwork-backdrop-ready){background:radial-gradient(ellipse at 76% 32%,#252d39 0%,#101419 54%,#000 87%)}
-.poster-wrap.artwork-poster-preview img{object-fit:contain;object-position:center}
 .artwork-credit{position:absolute;right:80px;bottom:16px;z-index:2;font-size:14px;line-height:20px;color:rgba(255,255,255,.65);text-decoration:none}

@@ -121,15 +121,14 @@
       });}).then(function(data){persist(k,data);var fullKey=itemKey(fullItem);if(fullKey!==k)persist(fullKey,data);resolve(data);}).catch(function(){failures[lookup]=Date.now();resolve(null);}).finally(function(){delete pending[lookup];});
     }};if(priority)queue.unshift(work);else queue.push(work);pump();});return pending[lookup];
   }
-  function roleOf(wide,full){return wide?(full?'hero':'wide'):'poster';}
-  function spec(role){return role==='hero'?{width:2560,min:1280,height:0}:role==='wide'?{width:640,min:480,height:180}:role==='person'?{width:384,min:192,height:192}:{width:342,min:140,height:180};}
-  function cardRole(role){return role==='wide'||role==='poster';}
+  function roleOf(full){return full?'hero':'wide';}
+  function spec(role){return role==='hero'?{width:2560,min:1280,height:0}:role==='person'?{width:384,min:192,height:192}:{width:640,min:480,height:180};}
   function isLandscape(value){var ratio=value.width/value.height;return ratio>=1.45&&ratio<=2.6;}
   function landscapeRole(role){return role==='hero'||role==='wide';}
   function sufficient(value,role){var size=spec(role);return value&&value.width>=size.min&&value.height>=size.height&&(!landscapeRole(role)||isLandscape(value));}
   function originalAssetURL(raw){try{var url=new URL(raw);return url.hostname==='wsrv.nl'&&url.searchParams.get('url')||raw;}catch(ignore){return raw;}}
   function candidates(raw,role){
-    if(!raw)return[];var size=spec(role),compact=cardRole(role),sized=imageURL(raw,role==='person'?'h632':role==='hero'?'original':role==='wide'?'w780':'w342'),target=sized||raw;
+    if(!raw)return[];var size=spec(role),compact=role==='wide',sized=imageURL(raw,role==='person'?'h632':role==='hero'?'original':'w780'),target=sized||raw;
     if(compact&&/^https:\/\/m\.media-amazon\.com\//.test(target))target=target.replace(/_SX\d+\./,'_SX'+size.width+'.');
     if(compact&&/^https:\/\/st\.kp\.yandex\.net\/images\/(?:film_big\/|film_iphone\/iphone\d+_)\d+\.jpg$/.test(target))target=target.replace(/\/(?:film_big\/|film_iphone\/iphone\d+_)(\d+)\.jpg$/,'/film_iphone/iphone360_$1.jpg');
     var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
@@ -162,15 +161,9 @@
     });}});imageQueue.sort(function(a,b){return b.priority-a.priority||a.order-b.order;});pumpImages();});
   }
   function firstImage(urls,role,strict,options){var at=0;options=options||{};function next(){if(at>=urls.length)return Promise.resolve(null);return loadImage(urls[at++],options.priority===undefined?(role==='hero'?2:role==='person'?1:0):options.priority,options.timeout,options.guard).then(function(value){if(strict&&!sufficient(value,role)){if(options.alternative)options.alternative(value);return next();}return value;},next);}return next();}
-  function kinopoiskId(item){
-    var ids={};function add(raw){var id=String(raw||'').trim();if(!/^[1-9]\d{0,8}$/.test(id)){try{var url=new URL(id,'https://www.kinopoisk.ru/'),match=/^(?:www\.)?kinopoisk\.ru$/.test(url.hostname)&&url.pathname.match(/^\/(?:film|series)\/([1-9]\d{0,8})(?:\/|$)/);id=match?match[1]:'';}catch(ignore){id='';}}if(id)ids[id]=true;}
-    [item].concat(item._alternatives||[]).forEach(function(record){var x=WePlayCatalogUnion.fields(record);[x.kinopoisk_id,x.kp_id,x.kinopoisk_url].forEach(add);if(record._video&&record._video.aggregator==='kp')add(record._video.titleId);});
-    sourceImages(item,true).forEach(function(raw){var url=new URL(raw),match=url.hostname==='st.kp.yandex.net'?url.pathname.match(/^\/images\/(?:film_big\/|film_iphone\/iphone\d+_)([1-9]\d{0,8})\.jpg$/):url.hostname==='kinopoiskapiunofficial.tech'?url.pathname.match(/^\/images\/posters\/kp(?:_small)?\/([1-9]\d{0,8})\.jpg$/):null;if(match)ids[match[1]]=true;});
-    var found=Object.keys(ids);return found.length===1?found[0]:'';
-  }
-  function sourceImages(item,compact,fields){
+  function sourceImages(item,fields){
     var urls=[];
-    function add(value,record){if(!value)return;if(Array.isArray(value)){value.forEach(function(v){add(v,record);});return;}if(typeof value==='object'){add(value.url||value.src||value.contentUrl,record);return;}var raw=String(value).trim(),m=raw.match(/data-(?:src|original|lazy-src)\s*=\s*["']([^"']+)["']/i)||raw.match(/\bsrc\s*=\s*["']([^"']+)["']/i);if(m)raw=m[1];raw=raw.replace(/&amp;/g,'&');if(!raw||raw==='null'||/^(?:data|blob):/i.test(raw)||/(?:^|[\/_-])(?:no[-_]?(?:image|poster|photo)|placeholder|spacer|blank|loading)(?:[.\/_-]|$)/i.test(raw))return;if(!/^(https?:)?\//.test(raw))raw=raw.indexOf('uploads/')===0?'/'+raw:'/uploads/posts/'+raw;try{var url=new URL(raw,record._url||item._url||'https://lord.kim/');if(!/^https?:$/.test(url.protocol))return;raw=url.href;}catch(ignore){return;}var original=raw.replace(/\/(?:thumbs|medium)\//g,'/');(compact?[raw]:[original,raw]).forEach(function(url){if(urls.indexOf(url)<0)urls.push(url);});}
+    function add(value,record){if(!value)return;if(Array.isArray(value)){value.forEach(function(v){add(v,record);});return;}if(typeof value==='object'){add(value.url||value.src||value.contentUrl,record);return;}var raw=String(value).trim(),m=raw.match(/data-(?:src|original|lazy-src)\s*=\s*["']([^"']+)["']/i)||raw.match(/\bsrc\s*=\s*["']([^"']+)["']/i);if(m)raw=m[1];raw=raw.replace(/&amp;/g,'&');if(!raw||raw==='null'||/^(?:data|blob):/i.test(raw)||/(?:^|[\/_-])(?:no[-_]?(?:image|poster|photo)|placeholder|spacer|blank|loading)(?:[.\/_-]|$)/i.test(raw))return;if(!/^(https?:)?\//.test(raw))raw=raw.indexOf('uploads/')===0?'/'+raw:'/uploads/posts/'+raw;try{var url=new URL(raw,record._url||item._url||'https://lord.kim/');if(!/^https?:$/.test(url.protocol))return;raw=url.href;}catch(ignore){return;}var original=raw.replace(/\/(?:thumbs|medium)\//g,'/');[original,raw].forEach(function(url){if(urls.indexOf(url)<0)urls.push(url);});}
     [item].concat(item._alternatives||[]).forEach(function(record){var x=WePlayCatalogUnion.fields(record);(fields||['image','download_poster','poster','poster_url','thumbnail','thumb']).forEach(function(key){add(x[key]||record[key],record);});});return urls;
   }
   /* One identity, one resource packet and one selected image family for every page. */
@@ -193,8 +186,8 @@
     data=data||{};var indexed=window.WePlayTMDB&&WePlayTMDB.collectionBackdrop&&WePlayTMDB.collectionBackdrop(item);
     var background=data;
     if(!data.background&&!(data.backgrounds||[]).length&&window.WePlayTMDB&&WePlayTMDB.indexed)background=WePlayTMDB.indexed(item)||data;
-    var id=kinopoiskId(item),posters=uniqueImages([data.poster,data.posterThumb].concat(id?['https://st.kp.yandex.net/images/film_big/'+id+'.jpg']:[],sourceImages(item,false))),landscapes=uniqueImages((background.backgrounds||[]).concat([background.background,background.backgroundThumb,indexed],sourceImages(item,false,['background','backgrounds','backdrop','backdrops','background_url','backdrop_url','fanart','screenshots'])));
-    return{landscapes:landscapes,posters:posters,original:landscapes[0]||posters[0]||'',preview:landscapes[0]?candidates(landscapes[0],'wide')[0]:posters[0]?candidates(posters[0],'wide')[0]:'',poster:posters[0]?candidates(posters[0],'poster')[0]:'',source:background.backgroundSource||background.source||'catalog',creditURL:background.backgroundCredit||background.castPage||''};
+    var landscapes=uniqueImages((background.backgrounds||[]).concat([background.background,background.backgroundThumb,indexed],sourceImages(item,['background','backgrounds','backdrop','backdrops','background_url','backdrop_url','fanart','screenshots'])));
+    return {landscapes:landscapes,source:background.backgroundSource||background.source||'catalog',creditURL:background.backgroundCredit||background.castPage||''};
   }
   function resourceFor(item,priority){
     var entry=resources.filter(function(record){return sameResource(record,item);})[0],wanted=identity(item);
@@ -224,7 +217,6 @@
   function mergeImages(entry,images){
     if(entry.images){
       images.landscapes=uniqueImages(images.landscapes.concat(entry.images.landscapes));
-      images.posters=uniqueImages(images.posters.concat(entry.images.posters));
     }
     entry.images=images;
   }
@@ -232,25 +224,6 @@
     entry.coverFamily=sourceURL;
     var previous=families[entry.key];if(previous&&!previous.posterFallback&&previous.sourceURL===sourceURL)return;
     families[entry.key]={identity:entry.identity,sourceURL:sourceURL,at:Date.now()};var keys=Object.keys(families).sort(function(a,b){return families[a].at-families[b].at;});while(keys.length>160)delete families[keys.shift()];try{localStorage.setItem(FAMILY_KEY,JSON.stringify(families));}catch(ignore){}
-  }
-  function selectPoster(entry){
-    if(entry.posterTask)return entry.posterTask;
-    var tried=[];
-    function availablePosters(){
-      var urls=[];
-      entry.images.posters.forEach(function(raw){candidates(raw,'poster').forEach(function(url){
-        if(tried.indexOf(url)<0){tried.push(url);urls.push(url);}
-      });});
-      return firstImage(urls,'poster',true,{timeout:1800,priority:1}).then(imageValue);
-    }
-    entry.posterTask=availablePosters().then(function(value){return value||entry.metadataTask.then(availablePosters);}).then(function(value){
-      if(value||!window.WePlayCatalog)return value;
-      return WePlayCatalog.info(entry.item,true).then(function(full){
-        entry.images.posters=uniqueImages(entry.images.posters.concat(sourceImages(full,false)));
-        return availablePosters();
-      }).catch(function(){return null;});
-    });
-    return entry.posterTask;
   }
   function firstAvailable(tasks){
     return new Promise(function(resolve){
@@ -298,7 +271,7 @@
       return landscape(uniqueImages([source]),'catalog');
     }
     function listed(){return landscape(entry.images.landscapes,entry.images.source,entry.images.creditURL);}
-    function catalog(item){return landscape(uniqueImages(sourceImages(item,false)),'catalog-poster');}
+    function catalog(item){return landscape(uniqueImages(sourceImages(item).concat(entry.metadata&&entry.metadata.poster||[])),'catalog');}
     function alternatives(item){
       var tasks=[];
       if(!entry.alternateBackdropTask)entry.alternateBackdropTask=metadataTask('cinemeta-backdrop:'+entry.key,function(){
@@ -339,12 +312,11 @@
       lookupMetadata(entry,false,true);
     }
     function retry(){
-      if(role==='poster')entry.posterTask=null;
       delete entry.assets[role];
       return null;
     }
     entry.activeAssets=(entry.activeAssets||0)+1;
-    entry.assets[role]=(landscapeRole(role)?selectLandscape(entry,role,refresh):selectPoster(entry)).then(function(value){return value?imageValue(value):retry();},retry).finally(function(){
+    entry.assets[role]=selectLandscape(entry,role,refresh).then(function(value){return value?imageValue(value):retry();},retry).finally(function(){
       if(--entry.activeAssets===0)entry.refreshing=false;
     });
     return entry.assets[role];
@@ -359,9 +331,8 @@
   function unavailable(img){img.style.visibility='hidden';img.removeAttribute('src');var parent=img.parentNode;if(!parent)return;parent.classList.remove('artwork-loading');parent.removeAttribute('aria-busy');parent.classList.add('unavailable');if(parent.classList.contains('poster-wrap')&&!parent.querySelector('.poster-fallback')){var text=document.createElement('div');text.className='poster-fallback';text.textContent=img.alt;parent.appendChild(text);}}
   function commit(img,value){
     if(!img.isConnected||img._weplayRetired)return;
-    var previous=img._weplayCommitted;
-    if(!value){if(!previous)unavailable(img);return;}
-    if(previous&&(!previous.posterPreview||value.posterPreview))return;
+    if(img._weplayCommitted)return;
+    if(!value){unavailable(img);return;}
     img._weplayCommitted=value;
     var role=img._weplayArt&&img._weplayArt.role;
     function reveal(){
@@ -370,9 +341,8 @@
       img.setAttribute('data-artwork-resolution',img.naturalWidth+'x'+img.naturalHeight);
       img.style.visibility='visible';img.setAttribute('data-artwork-ready','true');
       parent.classList.remove('artwork-loading');parent.classList.remove('unavailable');parent.removeAttribute('aria-busy');
-      parent.classList.toggle('artwork-poster-preview',!!value.posterPreview&&!isLandscape({width:img.naturalWidth,height:img.naturalHeight}));
-      if(landscapeRole(role)&&!value.posterPreview)parent.classList.add('artwork-backdrop-ready');
-      if(!value.posterPreview){stopArtworkRetry(img);if(observer)observer.unobserve(img);}
+      if(landscapeRole(role))parent.classList.add('artwork-backdrop-ready');
+      stopArtworkRetry(img);if(observer)observer.unobserve(img);
       var placeholder=parent.querySelector('.poster-fallback');if(placeholder)placeholder.remove();
       if(role==='hero'&&value.credit==='TVmaze'&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(value.creditURL||'')&&!parent.querySelector('.artwork-credit')){
         var credit=document.createElement('a');credit.className='artwork-credit';credit.textContent='Изображение: TVmaze';credit.href=value.creditURL;credit.tabIndex=-1;parent.appendChild(credit);
@@ -382,18 +352,15 @@
       if(img._weplayCommitted!==value||img._weplayRetired)return;
       img._weplayCommitted=null;
       if(img._weplayEntry){
-        var failedRole=value.posterPreview?'poster':role;
-        delete img._weplayEntry.assets[failedRole];
-        if(failedRole==='poster')img._weplayEntry.posterTask=null;
+        delete img._weplayEntry.assets[role];
         decoded=decoded.filter(function(frame){return frame.url!==value.url;});
       }
-      if(!value.posterPreview&&img._weplayPreview)commit(img,img._weplayPreview);
-      else unavailable(img);
+      unavailable(img);
       if(img._weplayArt)scheduleArtworkRetry(img);
     }
     function loaded(){
       if(img._weplayCommitted!==value||img._weplayRetired)return;
-      if(landscapeRole(role)&&!value.posterPreview&&!isLandscape({width:img.naturalWidth,height:img.naturalHeight})){failed();return;}
+      if(landscapeRole(role)&&!isLandscape({width:img.naturalWidth,height:img.naturalHeight})){failed();return;}
       validPoster(value.url,img).then(function(valid){
         if(!valid){failed();return;}
         if(img.decode)img.decode().then(reveal,function(){if(img.naturalWidth&&img.naturalHeight)reveal();else failed();});
@@ -408,7 +375,7 @@
   }
   function artworkCanRetry(img){return !document.hidden&&navigator.onLine!==false&&img._weplayInRange!==false;}
   function scheduleArtworkRetry(img,immediate){
-    if(!img.isConnected||img._weplayRetired||img._weplayCommitted&&!img._weplayCommitted.posterPreview){stopArtworkRetry(img);return;}
+    if(!img.isConnected||img._weplayRetired||img._weplayCommitted){stopArtworkRetry(img);return;}
     artworkRetries.add(img);
     if(img._weplayArtRetry!=null||img._weplayAttempt||!artworkCanRetry(img))return;
     var count=img._weplayRetryCount||0;
@@ -432,26 +399,15 @@
   window.addEventListener('offline',artworkVisibility);
   function loadArtwork(img,refresh){
     var config=img._weplayArt;
-    if(!config||img._weplayRetired||img._weplayAttempt||img._weplayCommitted&&!img._weplayCommitted.posterPreview||!img.isConnected)return;
+    if(!config||img._weplayRetired||img._weplayAttempt||img._weplayCommitted||!img.isConnected)return;
     img._weplayStarted=true;img._weplayAttempt=true;
     var rect=img.getBoundingClientRect(),visible=rect.top<innerHeight&&rect.bottom>0&&rect.left<innerWidth&&rect.right>0;
     var role=config.role,entry=img._weplayEntry||resourceFor(config.item,role==='hero'||visible);
     img._weplayEntry=entry;
-    var poster=Promise.resolve();
-    if(role==='wide'&&!img._weplayCommitted&&img.parentNode.classList.contains('poster-wrap')){
-      poster=new Promise(function(resolve){setTimeout(resolve,220);}).then(function(){
-        if(!img.isConnected||img._weplayRetired||img._weplayCommitted)return;
-        return resourceAsset(entry,'poster',refresh).then(function(value){
-          if(!value)return;
-          img._weplayPreview=Object.assign({},value,{posterPreview:true});
-          commit(img,img._weplayPreview);
-        });
-      });
-    }
     resourceAsset(entry,role,refresh).then(function(value){
       img._weplayAttempt=false;
-      if(value){commit(img,value);return;}
-      poster.then(function(){commit(img,null);scheduleArtworkRetry(img);});
+      commit(img,value);
+      if(!value)scheduleArtworkRetry(img);
     });
   }
   var observer=typeof IntersectionObserver!=='undefined'?new IntersectionObserver(function(entries){entries.forEach(function(entry){
@@ -461,11 +417,11 @@
     else if(artworkRetries.has(img))scheduleArtworkRetry(img,true);
   });},{root:document.getElementById('content'),rootMargin:'320px 160px'}):null;
   function bind(img,item,wide,full,eager){
-    if(img._weplayArt)return;img.style.visibility='hidden';img._weplayArt={item:item,role:typeof wide==='string'?({backdrop:'hero',preview:'wide',poster:'poster'}[wide]||wide):roleOf(wide,full)};img.setAttribute('data-artwork-key',itemKey(item));if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
+    if(img._weplayArt)return;img.style.visibility='hidden';img._weplayArt={item:item,role:roleOf(full||wide==='backdrop'||wide==='hero')};img.setAttribute('data-artwork-key',itemKey(item));if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
     if(observer)observer.observe(img);
     if(eager||!observer){if(img.isConnected)loadArtwork(img,false);else requestAnimationFrame(function(){if(!img._weplayStarted)loadArtwork(img,false);});}
   }
-  function prefetch(items,wide,full,count){return Promise.all((items||[]).slice(0,count||items.length).map(function(item){return asset(item,roleOf(wide,full),!!full);}));}
+  function prefetch(items,wide,full,count){return Promise.all((items||[]).slice(0,count||items.length).map(function(item){return asset(item,roleOf(full),!!full);}));}
   function prepare(items,wide,full,count){return Promise.race([prefetch(items,wide,full,count),new Promise(function(resolve){setTimeout(resolve,1400);})]);}
   function metadataTask(key,run,priority){return new Promise(function(resolve,reject){
     var job={key:key,run:function(){return Promise.resolve().then(run).then(resolve,reject);}};
