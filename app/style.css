@@ -231,9 +231,10 @@ nav button:focus{color:#111;background:#f5f5f5;outline:none;box-shadow:none;font
 .home-rail::-webkit-scrollbar{display:none}
 .view-home .home-rail .poster-wrap{height:0;padding-bottom:calc(56.25% - 2px);border-radius:12px}
 .home-rail .poster-wrap img{position:absolute;top:0;left:0;object-position:50% 28%}
-.rail-all-art{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center}
-.rail-all-art .icon{width:48px;height:48px}
-.rail-all-card:focus .poster-wrap,.rail-all-card:hover .poster-wrap{background:#f5f5f5;color:#111}
+.rail-all-card .poster-wrap{background:#f5f5f5;color:#111}
+.rail-all-art{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.rail-all-art .icon{width:36px;height:36px;margin-bottom:8px}
+.rail-all-label{font-size:24px;line-height:32px;font-weight:700}
 .primary,.secondary{border-radius:32px}
 .native-controls{left:80px;right:80px;padding:0;background:transparent;border:0;border-radius:0}
 .native-controls:before{content:'';position:absolute;z-index:-1;left:-80px;right:-80px;top:-160px;bottom:-112px;pointer-events:none;background:linear-gradient(0deg,rgba(0,0,0,.9) 0%,rgba(0,0,0,.64) 65%,transparent 100%)}
@@ -248,6 +249,7 @@ button:disabled:active{transform:none}
 #navigation button:focus{box-shadow:none}
 .movie-card:focus{box-shadow:none}
 .movie-card:focus .poster-wrap,.movie-card:focus:hover .poster-wrap{box-shadow:0 0 0 4px #fff;transform:none;transition:none}
+.rail-all-card:focus .poster-wrap,.rail-all-card:focus:hover .poster-wrap{background:#fff;box-shadow:0 0 0 2px #000,0 0 0 5px #fff}
 .movie-card:focus .movie-title{color:#fff}
 .movie-card:focus .movie-meta{color:#ccc}
 .home-section{position:relative}
@@ -262,5 +264,5 @@ button:disabled:active{transform:none}
 @media(prefers-reduced-motion:reduce){#sidebar-scrim{transition:none}}
 
 @media(prefers-reduced-motion:reduce){.featured-dots .featured-progress{transition:none}}
-.featured-art:not(.artwork-backdrop-ready),.home-rail .poster-wrap:not(.artwork-backdrop-ready){background:radial-gradient(ellipse at 76% 32%,#252d39 0%,#101419 54%,#000 87%)}
+.featured-art:not(.artwork-backdrop-ready),.home-rail .movie-card:not(.rail-all-card) .poster-wrap:not(.artwork-backdrop-ready){background:radial-gradient(ellipse at 76% 32%,#252d39 0%,#101419 54%,#000 87%)}
 .artwork-credit{position:absolute;right:80px;bottom:16px;z-index:2;font-size:14px;line-height:20px;color:rgba(255,255,255,.65);text-decoration:none}

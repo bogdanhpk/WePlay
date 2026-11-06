@@ -282,7 +282,7 @@
     var rail=gridOf(items,'home-'+index);rail.classList.add('home-rail');rail.setAttribute('data-focus-grid','0');rail.id='home-rail-'+index;rail.setAttribute('aria-label',spec[0]);
     if(index!=='continue'){
       var all=button('','movie-card rail-all-card',function(){push({kind:WePlayCatalog.isReleaseCategory(spec[1])?'releases':'catalog',title:WePlayCatalog.isReleaseCategory(spec[1])?'Новинки':spec[0],category:spec[1]});},'rail-all-'+index),wrap=element('div','poster-wrap'),art=element('div','rail-all-art');
-      art.appendChild(icon('caret-right'));wrap.appendChild(art);all.appendChild(wrap);all.appendChild(element('div','movie-title','Смотреть все'));all.appendChild(element('div','movie-meta',spec[0]));all.setAttribute('aria-label','Смотреть все: '+spec[0]);rail.appendChild(all);
+      art.appendChild(icon('caret-right'));art.appendChild(element('span','rail-all-label','Смотреть все'));wrap.appendChild(art);all.appendChild(wrap);all.setAttribute('aria-label','Смотреть все: '+spec[0]);rail.appendChild(all);
     }
     var arrows=[];
     [-1,1].forEach(function(direction){
