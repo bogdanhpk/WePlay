@@ -515,7 +515,7 @@
       if(g!==generation)return;loading.remove();
       var top=element('header','detail-topbar');top.appendChild(detailIconButton('Назад','arrow-left','secondary detail-back',back,'detail-back'));var headerActions=element('div','detail-header-actions');appendUpdateControl(headerActions);headerActions.appendChild(supportControl());top.appendChild(headerActions);content.appendChild(top);
       var wrap=element('article','detail'),hero=element('section','detail-hero'),art=element('div','detail-art'),background=element('img'),serial=isSeries(item);
-      background.alt='';art.appendChild(background);hero.appendChild(art);hero.appendChild(element('div','detail-scrim'));requestAnimationFrame(function(){WePlayArtwork.attach(background,item,'profile-backdrop');});
+      background.alt='';art.appendChild(background);hero.appendChild(art);hero.appendChild(element('div','detail-scrim'));requestAnimationFrame(function(){WePlayArtwork.attach(background,item,'backdrop');});
       var body=element('div','detail-content');body.appendChild(element('p','eyebrow',serial?'Сериал':'Фильм'));var title=element('h1','',text(item.title));title.id='detail-title';body.appendChild(title);hero.setAttribute('aria-labelledby','detail-title');
       var original=xf(item,'original_title');if(original)body.appendChild(element('p','original-title',original));
       var detailMeta=metadata(item),durationMeta=element('span','meta-part detail-duration');durationMeta.id='detail-duration';durationMeta.hidden=true;durationMeta.setAttribute('aria-live','polite');detailMeta.insertBefore(durationMeta,detailMeta.children[xf(item,'year')?1:0]||null);body.appendChild(detailMeta);body.appendChild(ratings(item,'inline'));
