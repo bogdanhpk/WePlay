@@ -1,10 +1,10 @@
 # WePlay для LG webOS
 
-Версия 1.0.1 включает общий интерфейс WePlay 1.22.45, поиск по каталогам, встроенный плеер, историю и избранное. Поддерживаются стрелки, OK, «Назад» и указатель Magic Remote. После установки достаточно подключения телевизора к интернету.
+Версия 1.0.2 включает общий интерфейс WePlay 1.22.46, поиск по каталогам, встроенный плеер, историю и избранное. Поддерживаются стрелки, OK, «Назад» и указатель Magic Remote. После установки достаточно подключения телевизора к интернету.
 
 Сборка рассчитана на **webOS TV 5.0 и новее** (LG с 2020 года). Совместимость с конкретной моделью и форматы видео нужно проверить на телевизоре. Это пакет для Developer Mode.
 
-[Скачать WePlay 1.0.1 для LG (.ipk)](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.1_all.ipk)
+[Скачать WePlay 1.0.2 для LG (.ipk)](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.2_all.ipk)
 
 ## Установка
 
@@ -18,10 +18,10 @@
    ares-novacom --device lg --getkey
    ```
 
-4. Введите код, когда CLI его запросит. Перейдите в папку с файлом `app.weplay.tv_1.0.1_all.ipk` и выполните:
+4. Введите код, когда CLI его запросит. Перейдите в папку с файлом `app.weplay.tv_1.0.2_all.ipk` и выполните:
 
    ```sh
-   ares-install --device lg app.weplay.tv_1.0.1_all.ipk
+   ares-install --device lg app.weplay.tv_1.0.2_all.ipk
    ares-launch --device lg app.weplay.tv
    ```
 

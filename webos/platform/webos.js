@@ -76,21 +76,6 @@
     return xhrOpen.apply(this, args);
   };
 
-  // Use the same Back path as the shared player, modal, keyboard and page stack.
-  window.addEventListener('keydown', function (event) {
-    if (event.keyCode !== 461 && event.which !== 461) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    var back = new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true, repeat: event.repeat});
-    Object.defineProperty(back, 'keyCode', {value: 27});
-    Object.defineProperty(back, 'which', {value: 27});
-    (document.activeElement || document).dispatchEvent(back);
-  }, true);
-
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden && window.WePlayNativePlayer && WePlayNativePlayer.active) WePlayNativePlayer.key(19);
-  });
-
   window.WePlayWebOS = {
     mediaURL: function (url) { return endpoint && isRemote(url) ? transport(url, false) : url; },
     exit: function () {

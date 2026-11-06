@@ -82,11 +82,13 @@ public final class MainActivity extends Activity {
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 // A provider response is data only: never open it as a page or external browser.
-                if ((ORIGIN + "/exit").equals(request.getUrl().toString())) finish();
+                if (request.isForMainFrame() && (ORIGIN + "/exit").equals(request.getUrl().toString())) finish();
                 return true;
             }
             @Override public void onPageFinished(WebView view, String url) {
+                if (!localPage()) return;
                 ready = true;
+                notifyForeground();
                 web.requestFocus();
                 if (updates != null) updates.status();
             }
@@ -97,6 +99,11 @@ public final class MainActivity extends Activity {
     }
 
     private boolean localPage() { return web != null && (ORIGIN + "/assets/weplay/index.html").equals(web.getUrl()); }
+    private void notifyForeground() {
+        if (ready && localPage()) {
+            web.evaluateJavascript("window.WePlayAndroid&&WePlayAndroid.foreground(" + resumed + ")", null);
+        }
+    }
     private void updateState(JSONObject state) {
         if (!localPage()) return;
         String encoded = Base64.encodeToString(state.toString().getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
@@ -187,23 +194,27 @@ public final class MainActivity extends Activity {
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         int key = webKey(event.getKeyCode());
-        if (key == 0) return super.dispatchKeyEvent(event);
-        if (web != null && ready) {
-            String type = event.getAction() == KeyEvent.ACTION_UP ? "keyup" : "keydown";
-            web.evaluateJavascript("window.WePlayAndroid&&WePlayAndroid.key('" + type + "'," + key + "," + (event.getRepeatCount() > 0) + ")", null);
+        if (key == 0 || !ready || !localPage()) return super.dispatchKeyEvent(event);
+        int action = event.getAction();
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) return super.dispatchKeyEvent(event);
+        if (action == KeyEvent.ACTION_UP && event.isCanceled()) {
+            web.evaluateJavascript("window.WePlayAndroid&&WePlayAndroid.cancelKey(" + key + ")", null);
+            return true;
         }
+        String type = action == KeyEvent.ACTION_UP ? "keyup" : "keydown";
+        web.evaluateJavascript("window.WePlayAndroid&&WePlayAndroid.key('" + type + "'," + key + "," + (event.getRepeatCount() > 0) + ")", null);
         return true; // Prevent the WebView from also generating a second click/focus move.
     }
 
     @Override public void onBackPressed() {
-        if (web != null && ready) web.evaluateJavascript("WePlayAndroid.key('keydown',27,false)", null);
+        if (ready && localPage()) web.evaluateJavascript("window.WePlayAndroid&&WePlayAndroid.key('keydown',27,false)", null);
         else finish();
     }
 
     @Override protected void onPause() {
         resumed = false;
         if (web != null) {
-            web.evaluateJavascript("window.WePlayAndroid&&WePlayAndroid.pause()", null);
+            notifyForeground();
             web.onPause();
         }
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -214,6 +225,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         resumed = true;
         if (web != null) web.onResume();
+        notifyForeground();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
         if (updates != null) {

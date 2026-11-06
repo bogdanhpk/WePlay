@@ -43,16 +43,6 @@ try {
   }
   fs.cpSync(platform, app, {recursive: true});
 
-  const appJS = path.join(app, 'app.js');
-  let appCode = fs.readFileSync(appJS, 'utf8');
-  appCode = replaceRequired(appCode, "try{tizen.application.getCurrentApplication().exit();}catch(ignore){toast('Вы уже на главной');}", 'WePlayWebOS.exit();');
-  appCode = appCode.replace(/^  (?:document\.addEventListener\('tizenhwkey'|try \{ \['MediaPlayPause').*\n/gm, '');
-  fs.writeFileSync(appJS, appCode);
-
-  const catalog = path.join(app, 'catalog.js');
-  fs.writeFileSync(catalog, replaceRequired(fs.readFileSync(catalog, 'utf8'), 'function original(params,options){',
-    "function original(params,options){\n    if(!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Каталог без ключа: используются другие источники.'));"));
-
   fs.writeFileSync(path.join(app, 'settings.js'), "window.WEPLAY_SETTINGS = { apiToken: '', tmdbReadToken: '' };\n");
   fs.writeFileSync(path.join(app, 'index.html'), html);
 

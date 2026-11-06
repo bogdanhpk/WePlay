@@ -1,7 +1,7 @@
 /* A short OK opens the profile; holding OK opens local viewing-history actions. */
 (function(){
   'use strict';
-  var HOLD=650,press=null,opened=false,trigger=null,item=null,onRemove=null,saved=[],scroll=0,clickGuard=null,lastBackAt=0;
+  var HOLD=650,press=null,opened=false,trigger=null,item=null,onRemove=null,saved=[],scroll=0,clickGuard=null;
   var stage=document.getElementById('stage'),viewport=document.getElementById('content'),modal=document.createElement('div');
   modal.id='continue-menu';modal.hidden=true;
   modal.innerHTML='<section class="continue-dialog" role="dialog" aria-modal="true" aria-labelledby="continue-name" aria-describedby="continue-description"><h2 id="continue-name"></h2><p id="continue-description" class="continue-description">Сохранённый прогресс сбросится. Можно будет начать просмотр сначала.</p><p id="continue-error" class="continue-error" role="alert" hidden></p><div class="continue-actions"><button id="continue-remove" class="secondary focusable" type="button">Убрать из просмотра</button><button id="continue-cancel" class="secondary focusable" type="button">Отмена</button></div></section>';
@@ -60,13 +60,12 @@
   window.addEventListener('resize',position);
   document.addEventListener('keydown',function(event){
     var key=event.keyCode||event.which;
-    if((key===27||key===10009)&&Date.now()-lastBackAt<350){event.preventDefault();event.stopImmediatePropagation();return;}
     // The release of the original hold must never activate the newly focused Remove button.
     if(press&&press.source==='key'&&key===13){event.preventDefault();event.stopImmediatePropagation();return;}
     if(opened){
       if(key!==13&&key!==32&&key!==9&&key!==27&&key!==10009&&!(key>=37&&key<=40)&&key!==33&&key!==34)return;
       event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;
-      if(key===27||key===10009){lastBackAt=Date.now();close(true);}else if(key===13||key===32)preferred().click();else if(key===9||key===38||key===40)WePlayFocus.focus(preferred()===remove?cancel:remove,false);return;
+      if(key===27||key===10009){close(true);}else if(key===13||key===32)preferred().click();else if(key===9||key===38||key===40)WePlayFocus.focus(preferred()===remove?cancel:remove,false);return;
     }
     if(key===13&&eligible(document.activeElement)){event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)begin(document.activeElement,'key');return;}
     if(press)cancelPress();
@@ -78,7 +77,6 @@
   document.addEventListener('click',function(event){if(clickGuard&&Date.now()<=clickGuard.until&&clickGuard.card.contains(event.target)){clickGuard=null;event.preventDefault();event.stopImmediatePropagation();}},true);
   document.addEventListener('contextmenu',function(event){var card=event.target.closest&&event.target.closest('[data-continue-card]');if(eligible(card)){event.preventDefault();cancelPress();open(card);}},true);
   document.addEventListener('focusin',function(event){if(opened&&!modal.contains(event.target)){event.stopImmediatePropagation();WePlayFocus.focus(remove,false);}else if(press&&!press.fired&&event.target!==press.card)cancelPress();},true);
-  document.addEventListener('tizenhwkey',function(event){if(event.keyName==='back'&&(opened||press||Date.now()-lastBackAt<350)){event.preventDefault();event.stopImmediatePropagation();lastBackAt=Date.now();cancelPress();close(true);}},true);
   window.addEventListener('blur',cancelPress);
   document.addEventListener('visibilitychange',function(){if(document.hidden){cancelPress();close(true);}});
   function bind(card,record,done){card.setAttribute('data-continue-card','');card.setAttribute('aria-haspopup','dialog');card.setAttribute('aria-controls','continue-menu');card.setAttribute('aria-expanded','false');card._continueItem=record;card._continueRemove=done;}

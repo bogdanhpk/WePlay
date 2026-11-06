@@ -23,6 +23,5 @@
   later.addEventListener('click',function(){close(true);});window.addEventListener('weplay:update-ready',sync);
   document.addEventListener('focusin',function(event){if(opened&&!modal.contains(event.target)){event.stopImmediatePropagation();WePlayFocus.focus(preferred(),false);}},true);
   document.addEventListener('keydown',function(event){if(!opened)return;var k=event.keyCode||event.which;if(k!==10009&&k!==27&&k!==13&&k!==32&&k!==9&&!(k>=37&&k<=40))return;event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;if(k===10009||k===27)close(true);else if(k===13||k===32)preferred().click();else WePlayFocus.focus(preferred()===apply?later:apply,false);},true);
-  document.addEventListener('tizenhwkey',function(event){if(opened&&event.keyName==='back'){event.preventDefault();event.stopImmediatePropagation();close(true);}},true);
   window.WePlayUpdatesUI={control:control,close:close,isOpen:function(){return opened;}};
 }());

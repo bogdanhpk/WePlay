@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var origin=location.origin,originalFetch=window.fetch.bind(window),open=XMLHttpRequest.prototype.open,send=XMLHttpRequest.prototype.send;
+  var origin=location.origin,originalFetch=window.fetch.bind(window),open=XMLHttpRequest.prototype.open;
   function transport(raw,credentials){
     var url=new URL(raw,location.href);if(url.origin===origin)return url.href;
     if(url.protocol!=='https:')throw new TypeError('Only HTTPS resources are supported');
@@ -18,27 +18,17 @@
     });
   };
   XMLHttpRequest.prototype.open=function(method,url){
-    this._weplayRequest={method:method,url:String(url),args:Array.prototype.slice.call(arguments)};
     // Open now so setRequestHeader and responseType keep their native semantics.
     var args=Array.prototype.slice.call(arguments);args[1]=transport(url,'omit');return open.apply(this,args);
   };
-  XMLHttpRequest.prototype.send=function(body){
-    // HLS requests omit credentials; catalog sessions use fetch with explicit include.
-    return send.call(this,body);
-  };
   window.WePlayAndroid={
     mediaURL:function(url){return transport(url,'omit');},
-    key:function(type,code,repeat){
-      var target=document.activeElement||document,keys={13:'Enter',27:'Escape',37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown'};
-      var event=new KeyboardEvent(type,{key:keys[code]||'Unidentified',keyCode:code,which:code,bubbles:true,cancelable:true,repeat:!!repeat});
-      // Older TV WebViews omit legacy keyCode from synthetic events.
-      if(event.keyCode!==code)Object.defineProperty(event,'keyCode',{value:code});
-      if(event.which!==code)Object.defineProperty(event,'which',{value:code});
-      target.dispatchEvent(event);
+    key:function(type,code,repeat){window.WePlayTV&&WePlayTV.key(type,code,repeat);},
+    cancelKey:function(code){
+      if(code===13&&window.WePlayContinue)WePlayContinue.cancelPress();
+      if(window.WePlayNativePlayer)WePlayNativePlayer.releaseSeekKey(code,true);
     },
-    pause:function(){
-      if(window.WePlayNativePlayer&&WePlayNativePlayer.active)WePlayNativePlayer.key(19);
-    },
+    foreground:function(visible){window.WePlayTV&&WePlayTV.setForeground(visible);},
     exit:function(){location.href=origin+'/exit';}
   };
 }());

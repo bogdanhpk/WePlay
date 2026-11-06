@@ -35,7 +35,7 @@
   var seekBar=null,seekKnob=null,seekBubble=null,bufferFill=null,finishLabel=null,settingsButton=null,previousButton=null,nextButton=null,qualityBadge=null;
   var preview=null,seekRun=0,lastSeekKeyAt=0,menuClose=null,menuShade=null,qualityPreference=0,selectedQuality=0,bufferTimer=null,pointerCleanup=null;
   var runningEpisode=null,started=false,runningEnded=false,resumeTarget=0,lastSavedAt=0;
-  var postplay=null,postplayDismissals={},postplayAutoplay=true;
+  var postplay=null,postplayDismissals={},postplayAutoplay=true,remoteSeekKey=0;
   try{audioPreference=localStorage.getItem('lord.audioPreference')||'';}catch(ignore){}
   try{qualityPreference=Number(localStorage.getItem('lord.quality.v1'))||0;}catch(ignore){}
   function put(node,value){if(node&&node.textContent!==value)node.textContent=value;}
@@ -57,7 +57,14 @@
     this.getResponseHeader=function(n){return inner.getResponseHeader?inner.getResponseHeader(n):null;};
     this.load=function(context,cfg,callbacks){
       self.context=context;var original=context.url,wire=Object.assign({},context,{url:encodedUrl(original)}),cb=Object.assign({},callbacks);
-      cb.onSuccess=function(response,stats,ctx,details){response.url=original;callbacks.onSuccess(response,stats,context,details);};
+      cb.onSuccess=function(response,stats,ctx,details){
+        // Relative HLS segments resolve against the redirected playlist. Keep the
+        // original base for the provider's encoded paths and hide local proxy URLs.
+        var finalURL=inner.getResponseHeader&&inner.getResponseHeader('X-WePlay-Final-URL');
+        if(!finalURL&&WePlayTV.name!=='android'&&WePlayTV.name!=='webos')finalURL=response.url;
+        response.url=options&&options.transport==='plain'&&/^https?:\/\//i.test(finalURL||'')?finalURL:original;
+        callbacks.onSuccess(response,stats,context,details);
+      };
       cb.onError=function(err,ctx,details,stats){if(callbacks.onError)callbacks.onError(err,context,details,stats);};
       cb.onTimeout=function(stats,ctx,details){if(callbacks.onTimeout)callbacks.onTimeout(stats,context,details);};
       cb.onProgress=function(stats,ctx,data,details){if(callbacks.onProgress)callbacks.onProgress(stats,context,data,details);};
@@ -86,19 +93,43 @@
     saveProgress(true);runningEpisode=null;started=false;
     if(postplay){postplay.destroy();postplay=null;}
     document.body.classList.remove('avplay-active');
-    clearTimeout(prepareTimer);clearTimeout(bufferTimer);preview=null;if(pointerCleanup)pointerCleanup();
+    clearTimeout(prepareTimer);clearTimeout(bufferTimer);preview=null;remoteSeekKey=0;if(pointerCleanup)pointerCleanup();
     if(hls){hls.destroy();hls=null;}
     if(api){try{if(['PLAYING','PAUSED','READY'].indexOf(api.getState())>=0)api.stop();api.close();}catch(ignore){}}
     if(video){video.pause();video.removeAttribute('src');video.load();video=null;}
   }
   function closeMenu(restore){if(menu)menu.remove();if(menuShade)menuShade.remove();menu=null;menuShade=null;menuClose=null;buttons=[];menuBack=null;if(settingsButton)settingsButton.setAttribute('aria-expanded','false');if(bar)bar.removeAttribute('aria-hidden');if(restore&&active)show(true);}
-  function play(){if(runningEnded)seekTo(0);wantsPlay=true;if(suspended||preview)return;try{if(api){if(['PAUSED','READY'].indexOf(api.getState())>=0)api.play();}else if(video){var p=video.play();if(p&&p.catch)p.catch(function(e){if(e.name!=='AbortError')error(e.name==='NotAllowedError'?'Нажмите «Продолжить» для запуска видео.':'Не удалось запустить видео. Попробуйте ещё раз.');});}}catch(e){report('nativePlayError',e.message);error('Не удалось запустить видео. Попробуйте ещё раз.');}updateControls();armHide();}
+  function play(){
+    if(!WePlayTV.isForeground())return;
+    if(runningEnded)seekTo(0);
+    wantsPlay=true;
+    if(suspended||preview)return;
+    var token=request;
+    try{
+      if(api){if(['PAUSED','READY'].indexOf(api.getState())>=0)api.play();}
+      else if(video){
+        var playing=video.play();
+        if(playing&&playing.catch)playing.catch(function(e){
+          if(token!==request||!wantsPlay||e.name==='AbortError')return;
+          error(e.name==='NotAllowedError'?'Нажмите «Продолжить» для запуска видео.':'Не удалось запустить видео. Попробуйте ещё раз.');
+        });
+      }
+    }catch(e){report('nativePlayError',e.message);error('Не удалось запустить видео. Попробуйте ещё раз.');}
+    updateControls();armHide();
+  }
   function pauseEngine(){try{if(api&&api.getState()==='PLAYING')api.pause();else if(video)video.pause();}catch(ignore){}}
   function pause(){wantsPlay=false;pauseEngine();saveProgress(true);updateControls();clearTimeout(timer);}
   function toggle(){if(wantsPlay)pause();else play();show(controlsFocused);}
   function clamp(ms){return Math.max(0,Math.min(totalTime>0?Math.max(0,totalTime-1000):currentTime,ms));}
   function seekTo(target){try{resumeTarget=0;runningEnded=false;currentTime=clamp(target);if(api&&['PLAYING','PAUSED'].indexOf(api.getState())>=0)api.seekTo(currentTime,function(){saveProgress(true);},function(){});else if(video)video.currentTime=currentTime/1000;tick(currentTime);if(!api)saveProgress(true);}catch(ignore){}}
   function seek(seconds){if(totalTime<=0||failed)return;seekTo(currentTime+seconds*1000);if(!menu)show(controlsFocused);}
+  function seekKey(code,repeat){
+    if(WePlayTV.name==='android'&&!repeat){
+      remoteSeekKey=code;
+      return;
+    }
+    beginSeek(code===37?-1:1,repeat);
+  }
   function beginSeek(direction,repeat,step){
     if(totalTime<=0||failed||suspended){show(true);return;}
     var now=Date.now();seekRun=repeat||now-lastSeekKeyAt<300?seekRun+1:0;lastSeekKeyAt=now;
@@ -107,13 +138,14 @@
     show(false);controlsFocused=true;WePlayFocus.focus(seekBar);tick(currentTime);clearTimeout(timer);
   }
   function finishSeek(commit,forcePlay){
-    if(!preview)return;var saved=preview;preview=null;seekRun=0;
+    if(!preview)return;var saved=preview;preview=null;seekRun=0;remoteSeekKey=0;
     if(commit)seekTo(saved.target);
     wantsPlay=forcePlay===undefined?saved.playing:forcePlay;if(wantsPlay)play();else pause();
     show(false);controlsFocused=true;WePlayFocus.focus(seekBar);tick(currentTime);armHide();report(commit?'seekCommitted':'seekCancelled',Math.round((commit?saved.target:saved.origin)/1000));
   }
   function tick(ms){
-    currentTime=ms;try{totalTime=api?api.getDuration():video.duration*1000;}catch(ignore){}
+    currentTime=ms;
+    try{var duration=api?api.getDuration():video.duration*1000;totalTime=isFinite(duration)&&duration>0?duration:0;}catch(ignore){}
     if(!failed&&resumeTarget>0&&totalTime>0&&resumeTarget>=totalTime){wantsPlay=false;pauseEngine();error('Сохранённый момент за пределами этого видео. Смените источник или выберите «Сначала».');return;}
     var position=preview?preview.target:ms,ratio=totalTime>0?Math.max(0,Math.min(1,position/totalTime)):0;
     put(elapsed,time(position));put(remaining,totalTime>0?time(totalTime):'—');
@@ -218,7 +250,7 @@
     choose('Субтитры',choices,function(index){hls.subtitleTrack=index;hls.subtitleDisplay=index>=0;showSettings('subtitles');report('subtitlesSelected',index);},function(){showSettings('subtitles');},{kind:'subtitles'});
   }
   function startEpisode(position,playing,focusId){
-    var token=++request,e=episodes[episodeIndex];position=typeof position==='number'?position:0;stopEngine();closeMenu(false);currentTime=position;totalTime=0;failed=false;loading=true;audioIndex=0;selectedQuality=0;wantsPlay=playing!==false;
+    var token=++request,e=episodes[episodeIndex];position=typeof position==='number'?position:0;stopEngine();closeMenu(false);currentTime=position;totalTime=0;failed=false;loading=true;audioIndex=0;selectedQuality=0;wantsPlay=playing!==false&&WePlayTV.isForeground();
     runningEpisode=e;runningEnded=false;resumeTarget=position;lastSavedAt=0;postplayAutoplay=true;
     if(options.resolveEpisode){audioIndex=0;(e.variants||[]).some(function(v,i){if(v.label===audioPreference){audioIndex=i;return true;}return false;});}
     options.status.textContent='Загружаем видео…';options.surface.innerHTML='';
@@ -228,27 +260,21 @@
     postplay=WePlayPostplay.create({root:document.getElementById('player'),icon:playerIcon,dismissed:postplayDismissals[currentIndex],
       next:following&&serial?{kind:'episode',title:options.title||'Следующая серия',caption:'Сезон '+following.season+' · Серия '+following.episode,item:options.mediaItem}:null,
       load:!serial&&options.nextMedia?options.nextMedia:null,
-      state:function(){return{time:currentTime,duration:totalTime,started:started,ended:runningEnded,creditsStart:creditsStart(e),playing:wantsPlay&&!loading,failed:failed,autoplay:postplayAutoplay,blocked:!active||suspended||!!menu||!!preview||document.hidden};},
+      state:function(){return{time:currentTime,duration:totalTime,started:started,ended:runningEnded,creditsStart:creditsStart(e),playing:wantsPlay&&!loading,failed:failed,autoplay:postplayAutoplay,blocked:!active||suspended||!!menu||!!preview||!WePlayTV.isForeground()};},
       controlsVisible:function(){return !!bar&&!bar.hidden;},
       returnFocus:function(){if(!active)return;if(runningEnded){show(false);WePlayFocus.focus(document.getElementById('native-exit'),false);}else document.getElementById('player').focus();},
       focusControls:function(){show(false);controlsFocused=true;WePlayFocus.focus(seekBar,false);},
       onDismiss:function(){postplayDismissals[currentIndex]=true;},
       onWatch:function(next){saveProgress(true,true);runningEnded=true;if(next.kind==='episode'){episodeIndex=currentIndex+1;startEpisode(0,true);report('postplayEpisode',episodeIndex);}else if(options.onNextMedia)options.onNextMedia(next.item);}
     });
-    if(options.resolveEpisode){options.resolveEpisode(e,audioIndex).then(function(stream){if(token===request)startEngine(token,e,stream,position);}).catch(function(err){if(token===request)error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');});}
-    else startEngine(token,e,e.hls,position);
+    if(options.resolveEpisode){options.resolveEpisode(e,audioIndex).then(function(stream){if(token===request)startEngine(token,stream,position);}).catch(function(err){if(token===request)error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');});}
+    else startEngine(token,e.hls,position);
   }
-  function startEngine(token,e,stream,position){
+  function startEngine(token,stream,position){
     var raw=typeof stream==='string'?stream:stream.url;
     var mp4=stream.format==='mp4'||stream.format!=='hls'&&/\.mp4(?:[?#]|$)/i.test(raw);
     if(!mp4&&window.Hls&&Hls.isSupported()){
-      api=null;video=el('video');video.id='native-video';video.autoplay=false;video.playsInline=true;
-      var media=video;media.addEventListener('pause',function(){if(token===request)saveProgress(true);});media.addEventListener('timeupdate',function(){if(token===request)tick(media.currentTime*1000);});
-      ['loadedmetadata','durationchange','loadeddata','resize'].forEach(function(name){media.addEventListener(name,function(){if(token===request)tick(currentTime);});});
-      media.addEventListener('playing',function(){if(token===request){if(suspended||preview){pauseEngine();return;}clearTimeout(bufferTimer);loading=false;failed=false;currentTime=media.currentTime*1000;playbackStarted();updateControls();armHide();report('videoPlaying',media.videoWidth+'x'+media.videoHeight);}});
-      media.addEventListener('waiting',function(){if(token===request&&!preview){loading=true;updateControls();armHide();clearTimeout(bufferTimer);bufferTimer=setTimeout(function(){if(token===request&&loading&&!suspended&&!preview)options.status.textContent='Буферизация…';},600);}});
-      media.addEventListener('ended',function(){if(token===request&&!suspended)completed();});
-      options.surface.appendChild(media);
+      var media=createVideo(token,0,true);
       hls=new Hls({loader:ProviderLoader,enableWorker:false,debug:false,startLevel:0,startPosition:position/1000,capLevelToPlayerSize:true,backBufferLength:20,maxBufferLength:30,maxMaxBufferLength:60});
       hls.on(Hls.Events.MANIFEST_PARSED,function(ev,data){if(token!==request)return;report('hlsReady',data.levels.length);if(qualityPreference){var chosen=WePlayQuality.preferred(qualityLevels(),qualityPreference);if(chosen){hls.nextLevel=chosen.index;selectedQuality=chosen.height;}}if(hls.subtitleTracks&&hls.subtitleTracks.length)hls.subtitleTrack=-1;tick(currentTime);if(wantsPlay)play();});
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED,function(){if(token!==request||!audioPreference||options.resolveEpisode)return;var selected=audioOptions().filter(function(t){return t.label===audioPreference;})[0];if(selected)hls.audioTrack=selected.index;});
@@ -278,8 +304,41 @@
         api.prepareAsync(function(){if(token!==request)return;clearTimeout(prepareTimer);if(position>0)try{api.seekTo(position);}catch(ignore){}if(wantsPlay)play();totalTime=api.getDuration();report('nativeStarted',JSON.stringify({duration:totalTime,episode:episodeIndex}));show(false);},function(err){if(token===request){report('nativePrepareError',err.name||err.message||err);error('Не удалось загрузить видео. Попробуйте ещё раз.');}});
       }catch(err){error('Не удалось открыть видео: '+err.message);}
     }else{
-      api=null;video=el('video');video.id='native-video';video.autoplay=false;video.playsInline=true;var platform=window.WePlayAndroid||window.WePlayWebOS;video.src=mp4&&platform?platform.mediaURL(raw):raw;var media=video;['loadedmetadata','loadeddata','resize'].forEach(function(name){media.addEventListener(name,function(){if(token===request){if(name==='loadedmetadata'&&position>0)media.currentTime=position/1000;updateControls();}});});video.addEventListener('pause',function(){if(token===request)saveProgress(true);});video.addEventListener('timeupdate',function(){if(token===request)tick(video.currentTime*1000);});video.addEventListener('playing',function(){if(token===request){if(suspended){pauseEngine();return;}loading=false;failed=false;currentTime=media.currentTime*1000;playbackStarted();options.status.textContent='';updateControls();armHide();}});video.addEventListener('ended',function(){if(token===request&&!suspended)completed();});video.addEventListener('error',function(){if(token===request)error('Не удалось загрузить видео. Попробуйте ещё раз.');});options.surface.appendChild(video);if(wantsPlay)play();
+      var direct=createVideo(token,position,false);
+      direct.src=mp4?WePlayTV.mediaURL(raw):raw;
+      if(wantsPlay)play();
     }
+  }
+  function createVideo(token,position,managed){
+    api=null;
+    var media=video=el('video');
+    media.id='native-video';
+    media.playsInline=true;
+    function listen(name,fn){
+      media.addEventListener(name,function(){if(token===request)fn();});
+    }
+    listen('loadedmetadata',function(){
+      if(position>0&&(!isFinite(media.duration)||position<media.duration*1000))media.currentTime=position/1000;
+      tick(currentTime);
+    });
+    ['durationchange','loadeddata','resize'].forEach(function(name){listen(name,function(){tick(currentTime);});});
+    listen('pause',function(){saveProgress(true);});
+    listen('timeupdate',function(){tick(media.currentTime*1000);});
+    listen('playing',function(){
+      if(!WePlayTV.isForeground()||!wantsPlay||suspended||preview){pauseEngine();return;}
+      clearTimeout(bufferTimer);loading=false;failed=false;currentTime=media.currentTime*1000;
+      playbackStarted();options.status.textContent='';updateControls();armHide();
+      report('videoPlaying',media.videoWidth+'x'+media.videoHeight);
+    });
+    listen('waiting',function(){
+      if(!wantsPlay||suspended||preview)return;
+      loading=true;updateControls();armHide();clearTimeout(bufferTimer);
+      bufferTimer=setTimeout(function(){if(token===request&&loading&&wantsPlay&&!suspended&&!preview)options.status.textContent='Буферизация…';},600);
+    });
+    listen('ended',function(){if(!suspended)completed();});
+    if(!managed)listen('error',function(){error('Не удалось загрузить видео. Попробуйте ещё раз.');});
+    options.surface.appendChild(media);
+    return media;
   }
   function control(id,label,name,caption,action){
     var b=el('button','focusable secondary native-control');b.id=id;b.type='button';b.setAttribute('aria-label',label);
@@ -308,7 +367,6 @@
   var pointerAt=0,playerRoot=document.getElementById('player');
   playerRoot.addEventListener('mousemove',function(){if(active&&!menu&&!suspended&&!preview&&Date.now()-pointerAt>250){pointerAt=Date.now();show(false);}});
   playerRoot.addEventListener('click',function(event){if(active&&!menu&&!suspended&&(event.target.id==='native-video'||event.target.id==='player-surface')){if(preview)finishSeek(true,true);else toggle();show(true);}});
-  document.addEventListener('visibilitychange',function(){if(document.hidden)saveProgress(true);});
   window.addEventListener('pagehide',function(){saveProgress(true);});
   window.addEventListener('beforeunload',function(){saveProgress(true);});
   window.WePlayNativePlayer={
@@ -322,8 +380,23 @@
       active=true;document.body.classList.add('native-playing');startEpisode(opts.resume?opts.resume.position:0);report('nativeResolved',episodes.length);
     },
     close:function(){++request;active=false;stopEngine();closeMenu(false);if(bar)bar.remove();bar=null;timeline=null;controlsFocused=false;suspended=false;clearTimeout(timer);document.body.classList.remove('native-playing');document.getElementById('player').classList.remove('native-loading');api=null;options=null;},
+    pauseForBackground:function(){
+      if(!active)return;
+      postplayAutoplay=false;remoteSeekKey=0;
+      if(preview){preview=null;seekRun=0;if(pointerCleanup)pointerCleanup();if(seekBubble)seekBubble.hidden=true;}
+      pause();if(postplay)postplay.update();
+    },
     suspendForExit:function(){var resume=active&&(preview?preview.playing:wantsPlay)&&!failed;preview=null;suspended=true;clearTimeout(timer);pauseEngine();saveProgress(true);updateControls();return resume;},
     restoreAfterExit:function(resume){suspended=false;if(resume&&!failed)play();else pause();updateControls();armHide();},
+    releaseSeekKey:function(code,cancelled){
+      if(!active||!remoteSeekKey||code!==remoteSeekKey)return false;
+      remoteSeekKey=0;
+      if(preview)finishSeek(!cancelled);
+      else if(!cancelled&&!menu&&!suspended&&totalTime>0&&!failed){
+        seekTo(currentTime+(code===37?-10000:10000));show(false);
+      }
+      return true;
+    },
     key:function(k,shift,repeat){
       if(!active)return false;
       if(k===415){postplayAutoplay=true;if(runningEnded&&postplay&&postplay.snapshot().visible&&postplay.snapshot().kind==='episode'){postplay.update();return true;}if(preview)finishSeek(true,true);else play();if(!menu)show(controlsFocused);return true;}if(k===19){if(runningEnded)postplayAutoplay=false;if(preview)finishSeek(false,false);else pause();if(!menu)show(controlsFocused);return true;}
@@ -352,7 +425,7 @@
       }
       if(k===27||k===10009){if(bar&&!bar.hidden){hideControls();return true;}return false;}
       if(bar&&!bar.hidden&&document.activeElement===seekBar){
-        if(k===37||k===39){beginSeek(k===37?-1:1,repeat);return true;}
+        if(k===37||k===39){seekKey(k,repeat);return true;}
         if(k===38){WePlayFocus.focus(document.getElementById('native-exit'));return true;}
         if(k===40||k===13){show(true);return true;}
       }
@@ -368,7 +441,7 @@
       if(k===13){toggle();show(true);return true;}
       if(k===38){show(false);controlsFocused=true;if(totalTime>0)WePlayFocus.focus(seekBar);else show(true);return true;}
       if(k===40||k===457||k===73||k===9){show(true);return true;}
-      if(k===37||k===39){beginSeek(k===37?-1:1,repeat);return true;}
+      if(k===37||k===39){seekKey(k,repeat);return true;}
       if(k===403){barSelection='native-audio';chooseAudio();return true;}
       return false;
     }

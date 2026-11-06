@@ -56,6 +56,7 @@
   function documentAt(raw,s,timeout,options){return (options?searchFetch(raw,false,'include',options):fetchData(raw,false,'include',timeout||8000)).then(function(html){if(s.layout==='media'&&/^\/\d+\/?$/.test(new URL(raw).pathname))delete memory['html:'+raw];return new DOMParser().parseFromString(html,'text/html');});}
   function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,pageURL:pageURL,remember:remember,search:!!options,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
   function original(params,options){
+    if(!window.WEPLAY_SETTINGS||!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Основной каталог недоступен без ключа.'));
     var q=Object.keys(params).filter(function(k){return params[k]!==undefined&&params[k]!==null;}).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);});q.push('token='+encodeURIComponent(WEPLAY_SETTINGS.apiToken));
     var raw=sources[0].base+'api.php?'+q.join('&');return (options?searchFetch(raw,true,'omit',options):fetchData(raw,true,'omit',8000)).then(function(j){if(!j||j.success===false||!j.data)throw new Error('Основной каталог недоступен.');return j;});
   }

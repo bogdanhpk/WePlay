@@ -7,7 +7,7 @@
   var surface = document.getElementById('player-surface'), status = document.getElementById('player-status');
   var toolbar = document.getElementById('player-toolbar'), hint = document.getElementById('player-hint');
   var exitDialog=document.getElementById('exit-confirm'),exitContinue=document.getElementById('exit-continue'),exitLeave=document.getElementById('exit-leave');
-  var exitFocus=null,exitResume=false,lastBackAt=0,playingItem=null,playingChoice=null,playingSeason=null,playerFetchAbort=null,playingRestart=false,detailProgressUpdate=null;
+  var exitFocus=null,exitResume=false,exitApp=false,playingItem=null,playingChoice=null,playingSeason=null,playerFetchAbort=null,playingRestart=false,detailProgressUpdate=null;
   var routes = [], current = {kind:'home'}, generation = 0, cache = {}, categories = [];
   var activeSource = 0, playerGeneration = 0, hideTimer;
   var toastTimer, savedFocus, log = [];
@@ -105,13 +105,13 @@
     var tools=element('div','header-tools');
     appendUpdateControl(tools);tools.appendChild(supportControl());h.appendChild(tools);content.appendChild(h);return h;
   }
-  function appendUpdateControl(host){if(window.WePlayUpdatesUI)host.appendChild(WePlayUpdatesUI.control(function(){setSidebar(false);lastBackAt=0;},function(){lastBackAt=Date.now();}));}
+  function appendUpdateControl(host){if(window.WePlayUpdatesUI)host.appendChild(WePlayUpdatesUI.control(function(){setSidebar(false);}));}
   function supportControl(){
     var wrapper=element('span','support-control');
     var b=detailIconButton('Поддержать','currency-rub','primary support-action',function(){
       if(!overlay.hidden)return;
       var active=document.activeElement;if(active&&active.tagName==='INPUT')active.blur();setSidebar(false);
-      lastBackAt=0;WePlaySupport.open(b,function(){lastBackAt=Date.now();});
+      WePlaySupport.open(b);
     },'support-open');
     b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls','support-modal');b.setAttribute('aria-expanded','false');wrapper.appendChild(b);return wrapper;
   }
@@ -189,9 +189,9 @@
     restored=document.getElementById(route.focus);
     if(!restored&&route.contentId){var canonical=WePlayCatalogUnion.canonical(route.contentId),matches=Array.prototype.filter.call(content.querySelectorAll('.movie-card'),function(b){return WePlayCatalogUnion.canonical(b.getAttribute('data-content-id'))===canonical;});restored=matches.filter(function(b){var rail=b.closest('.home-rail');return rail&&rail.id===route.focusRail;})[0]||matches[0];}
     if(!restored&&route.kind==='home'&&route.focusRail){var fallback=document.getElementById(route.focusRail)||content.querySelector('.home-rail'),list=fallback&&WePlayFocus.items(fallback),saved=(route.rails||[]).filter(function(r){return r.id===route.focusRail;})[0];if(list&&list.length)restored=list[Math.min(list.length-1,saved&&saved.index||0)];}
-    scroll();focus(restored||content.querySelector('.focusable'),false);scroll();lastBackAt=Date.now();
+    scroll();focus(restored||content.querySelector('.focusable'),false);scroll();
     // Some TV engines scroll a focused element despite preventScroll.
-    var view=content,focused=document.activeElement;requestAnimationFrame(function(){if(content===view&&document.activeElement===focused){scroll();lastBackAt=Date.now();}});
+    var view=content,focused=document.activeElement;requestAnimationFrame(function(){if(content===view&&document.activeElement===focused){scroll();}});
   }
   function navigate(route,restore) {
     WePlayContinue.cancelPress();WePlayContinue.close(false);
@@ -240,7 +240,8 @@
     if(searchEditor&&searchEditor.back&&searchEditor.back())return;
     if(routes.length){navigate(routes.pop(),true);return;}
     if(current.kind!=='home'){navigate({kind:'home'});return;}
-    try{tizen.application.getCurrentApplication().exit();}catch(ignore){toast('Вы уже на главной');}
+    if(WePlayTV.name==='tizen')showExitDialog(true);
+    else if(!WePlayTV.exit())toast('Вы уже на главной');
   }
   function home(g,restore) {
     var route=current,promoState=restore&&route.homePromo;
@@ -589,24 +590,29 @@
     }).catch(function(e){if(id===playerGeneration){overlay.classList.remove('player-resolving');status.textContent=e.name==='AbortError'?'Видео не ответило вовремя. Попробуйте ещё раз.':resume?'Не удалось продолжить просмотр. Попробуйте ещё раз или выберите «Сначала».':playingSeason?'Не удалось запустить выбранный сезон. Попробуйте ещё раз.':'Не удалось загрузить видео. Попробуйте ещё раз или вернитесь к фильму.';document.getElementById('player-retry').hidden=false;hint.textContent='OK — нажать выбранную кнопку · Назад — вернуться к фильму';showPlayerTools();if(exitDialog.hidden)document.getElementById('player-retry').focus();diagnostic('playerFetchError',e.message);}});
   }
   function requestExit(){
-    if(overlay.hidden||!exitDialog.hidden)return;
-    exitFocus=document.activeElement;exitResume=!!(window.WePlayNativePlayer&&WePlayNativePlayer.active&&WePlayNativePlayer.suspendForExit());
-    overlay.setAttribute('aria-hidden','true');exitDialog.hidden=false;exitContinue.focus();diagnostic('exitConfirmation');
+    if(!overlay.hidden)showExitDialog(false);
+  }
+  function showExitDialog(quitApp){
+    if(!exitDialog.hidden)return;
+    exitApp=quitApp;exitFocus=document.activeElement;
+    document.getElementById('exit-title').textContent=quitApp?'Выйти из WePlay?':'Завершить просмотр?';
+    document.getElementById('exit-description').textContent=quitApp?'Приложение закроется.':'Вы вернётесь к карточке фильма.';
+    exitContinue.textContent=quitApp?'Остаться':'Продолжить просмотр';
+    if(!quitApp){exitResume=!!(window.WePlayNativePlayer&&WePlayNativePlayer.active&&WePlayNativePlayer.suspendForExit());overlay.setAttribute('aria-hidden','true');}
+    exitDialog.hidden=false;exitContinue.focus();diagnostic('exitConfirmation');
   }
   function cancelExit(){
     if(exitDialog.hidden)return;exitDialog.hidden=true;overlay.removeAttribute('aria-hidden');
-    if(window.WePlayNativePlayer&&WePlayNativePlayer.active)WePlayNativePlayer.restoreAfterExit(exitResume);
-    var previous=exitFocus;exitFocus=null;exitResume=false;
-    if(previous&&previous.isConnected&&previous.offsetWidth&&previous.offsetHeight&&!previous.disabled)previous.focus();else overlay.focus();diagnostic('exitCancelled');
+    if(!exitApp&&window.WePlayNativePlayer&&WePlayNativePlayer.active)WePlayNativePlayer.restoreAfterExit(exitResume);
+    var previous=exitFocus;exitFocus=null;exitResume=false;exitApp=false;
+    if(previous&&previous.isConnected&&previous.offsetWidth&&previous.offsetHeight&&!previous.disabled)previous.focus();else focus(overlay.hidden?content.querySelector('.focusable')||viewport:overlay);diagnostic('exitCancelled');
   }
-  // Count from the end of a synchronous redraw: queued Samsung Back events belong to the same press.
-  function handleBack(){var now=Date.now();if(now-lastBackAt<220)return;lastBackAt=now;try{back();}finally{lastBackAt=Date.now();}}
   function exitKey(e,k){
-    if(k===10009||k===27){if(!e.repeat)handleBack();}
+    if(k===10009||k===27){if(!e.repeat)back();}
     else if(k===37||k===38)exitContinue.focus();
     else if(k===39||k===40)exitLeave.focus();
     else if(k===9)(document.activeElement===exitContinue?exitLeave:exitContinue).focus();
-    else if(k===13&&!e.repeat){if(document.activeElement===exitLeave)closePlayer();else cancelExit();}
+    else if(k===13&&!e.repeat){if(document.activeElement===exitLeave)confirmExit();else cancelExit();}
     if([9,13,27,32,37,38,39,40,10009,413,412,417,415,19,10252,457,403].indexOf(k)>=0)e.preventDefault();
   }
   function closePlayer() {
@@ -619,7 +625,14 @@
   }
   var playerBack=document.getElementById('player-back');playerBack.appendChild(icon('arrow-left'));playerBack.onclick=requestExit;
   document.getElementById('player-retry').onclick=function(){if(playingItem)openPlayer(playingItem,playingChoice,playingSeason,playingRestart);};
-  exitContinue.onclick=cancelExit;exitLeave.onclick=closePlayer;
+  exitContinue.onclick=cancelExit;exitLeave.onclick=confirmExit;
+  function confirmExit(){if(!exitApp){closePlayer();return;}cancelExit();if(!WePlayTV.exit())toast('Не удалось закрыть WePlay');}
+  window.addEventListener('weplay:foreground',function(event){
+    if(event.detail||overlay.hidden)return;
+    exitResume=false;
+    if(WePlayTV.name==='tizen')closePlayer();
+    else if(window.WePlayNativePlayer)WePlayNativePlayer.pauseForBackground();
+  });
   function setSidebar(open){sidebar.classList.toggle('expanded',open);stage.classList.toggle('sidebar-open',open);var trigger=document.getElementById('home-menu');if(trigger){trigger.setAttribute('aria-expanded',String(open));trigger.setAttribute('aria-controls','sidebar');}}
   function leaveSidebar(){setSidebar(false);focus(lastContentFocus&&lastContentFocus.isConnected?lastContentFocus:content.querySelector('.focusable')||viewport);}
   function openSidebar(){setSidebar(true);focus(nav.querySelector('.current')||nav.firstElementChild);}
@@ -703,7 +716,7 @@
     if(WePlaySupport.key(e,k))return;
     if(!exitDialog.hidden){exitKey(e,k);return;}
     if(!overlay.hidden){
-      if(k===10009||k===27){e.preventDefault();if(!e.repeat)handleBack();return;}
+      if(k===10009||k===27){e.preventDefault();if(!e.repeat)back();return;}
       if(k===413){e.preventDefault();if(!e.repeat)requestExit();return;}
       if(k===13&&e.repeat){e.preventDefault();return;}
       if(window.WePlayNativePlayer&&WePlayNativePlayer.active&&WePlayNativePlayer.key(k,e.shiftKey,e.repeat)){e.preventDefault();return;}
@@ -717,25 +730,26 @@
     var featuredTarget=k===37&&active.id==='featured-prev'?'featured-info':k===39&&active.id==='featured-info'?'featured-prev':k===37&&active.id==='featured-open'?'nav-0':null;
     if(featuredTarget){e.preventDefault();if(featuredTarget==='nav-0')openSidebar();else focus(document.getElementById(featuredTarget));return;}
     if(nav.contains(active)){
-      if(k===39||k===27||k===10009){e.preventDefault();if(k!==39)lastBackAt=Date.now();leaveSidebar();return;}
+      if(k===39||k===27||k===10009){e.preventDefault();if(!e.repeat||k===39)leaveSidebar();return;}
       if(k===37){e.preventDefault();return;}
       if(k===38||k===40){e.preventDefault();var next=k===38?active.previousElementSibling:active.nextElementSibling;if(next)focus(next);return;}
     }
     if(tag==='INPUT'&&[27,10009,38,40,33,34,427,428].indexOf(k)<0)return;
     if(tag==='SELECT'&&selectEditing){
-      if(k===27||k===10009){selectEditing=false;lastBackAt=Date.now();e.preventDefault();return;}
+      if(k===27||k===10009){selectEditing=false;e.preventDefault();return;}
       if(k===13)selectEditing=false;
       return;
     }
     if(tag==='SELECT'&&k===13){selectEditing=true;return;}
-    if(k===10009||k===27){e.preventDefault();if(!e.repeat)handleBack();return;}
+    if(k===10009||k===27){e.preventDefault();if(!e.repeat)back();return;}
     if(contentKey(k)){e.preventDefault();return;}
     if(k>=37&&k<=40){e.preventDefault();spatial(k,content);}
     else if(k===13&&active&&active.tagName==='BUTTON'){e.preventDefault();if(!e.repeat)active.click();}
   },true);
+  document.addEventListener('keyup',function(e){
+    if(!overlay.hidden&&exitDialog.hidden&&window.WePlayNativePlayer&&WePlayNativePlayer.releaseSeekKey(e.keyCode||e.which,false))e.preventDefault();
+  },true);
   document.addEventListener('mousedown',function(e){selectEditing=e.target.tagName==='SELECT';});
-  document.addEventListener('tizenhwkey',function(e){if(e.keyName==='back'){e.preventDefault();handleBack();}});
-  try { ['MediaPlayPause','MediaPlay','MediaPause','MediaStop','MediaRewind','MediaFastForward','Info','ColorF0Red','ChannelUp','ChannelDown','1','2','3'].forEach(function(key){try{tizen.tvinputdevice.registerKey(key);}catch(ignore){}}); } catch(ignore){}
   navigate(current);diagnostic('boot',navigator.userAgent);
   if(window.WePlayRuntime)WePlayRuntime.ready();
 }());

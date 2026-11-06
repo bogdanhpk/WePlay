@@ -22,14 +22,6 @@ for(const dir of ['assets','fonts','vendor']){
 for(const file of files){
   const destination=path.join(target,file);fs.mkdirSync(path.dirname(destination),{recursive:true});
   let bytes=fs.readFileSync(path.join(source,file));
-  if(file==='app.js'){
-    const before="try{tizen.application.getCurrentApplication().exit();}catch(ignore){toast('Вы уже на главной');}";
-    if(!bytes.toString().includes(before))throw new Error('Review Android exit adapter: source changed');
-    bytes=Buffer.from(bytes.toString().replace(before,'WePlayAndroid.exit();'));
-  }
-  if(file==='catalog.js'){
-    bytes=Buffer.from(bytes.toString().replace('function original(params,options){',"function original(params,options){\n    if(!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Каталог без ключа: используются другие источники.'));"));
-  }
   if(file==='updates-ui.js')bytes=fs.readFileSync(path.join(root,'platform/android-updates.js'));
   if(file==='updates.css')bytes=Buffer.concat([bytes,Buffer.from('\n'),fs.readFileSync(path.join(root,'platform/android-updates.css'))]);
   fs.writeFileSync(destination,bytes);
