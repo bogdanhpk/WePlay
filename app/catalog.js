@@ -105,7 +105,7 @@
     var known=index[String(id)];if(!known||!known._url)throw new Error('Откройте фильм из каталога или поиска заново.');
     if(s.layout==='media')return WePlayWebCatalog.detail(known,s,webHelpers(options)).then(function(item){remember(item);return{success:true,data:item};});
     return documentAt(known._url,s,null,options).then(function(doc){
-      var item={id:id,title:known.title,_source:s.id,_url:known._url,_kind:known._kind,_detail:true,xfields:Object.assign({},known.xfields)},x=item.xfields;
+      var item={id:id,title:known.title,_source:s.id,_url:known._url,_kind:known._kind,_kindHint:WePlayWebCatalog.breadcrumbKind(doc)||known._kindHint,_detail:true,xfields:Object.assign({},known.xfields)},x=item.xfields;
       var titleNode=doc.querySelector('h1');if(titleNode){var title=titleNode.cloneNode(true);list(title,'small').forEach(function(n){n.remove();});item.title=text(title).replace(/\s*\((?:фильм\s*)?\d{4}\).*$/i,'').replace(/\s+смотреть онлайн.*$/i,'').trim();}
       if(s.layout==='re')item.title=WePlayWebCatalog.cleanTitle(item.title);
       item.full_story=get(doc,s.id==='sb'?'.fdesc [itemprop="description"],.fdesc':'.lfs-intro__text,.page__text .full-text');

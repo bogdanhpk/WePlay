@@ -135,7 +135,7 @@
     var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
     var compactPublicFrame=role==='wide'&&!sized&&/^https?:\/\/[^/?#@\s]+\/[^?#\s]+$/.test(target);
     var directFrame=/^https:\/\/(?:images\.restream-media\.net|images\.metahub\.space)\//.test(target);
-    var urls=!directFrame&&(isTV&&remote||compactPublicFrame)?[relay,target]:[target,relay];
+    var urls=!directFrame&&(isTV&&remote&&!compact||compactPublicFrame)?[relay,target]:[target,relay];
     if(compact&&target!==raw)urls.push(raw);
     return urls;
   }

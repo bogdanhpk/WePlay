@@ -9,7 +9,7 @@
     var node=doc.querySelector('[itemprop="alternativeHeadline"],.lfs-original,.page__original,meta[property="og:original_title"]'),direct=node&&(node.getAttribute('content')||node.textContent),schema=structured(doc);
     if(direct)return title(direct);if(typeof schema.alternateName==='string')return title(schema.alternateName);
     var keywords=doc.querySelector('meta[name="keywords"]'),value=keywords&&keywords.getAttribute('content')||'',escaped=title(name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),date=String(year||'').match(/(?:19|20)\d{2}/);
-    if(!escaped||!date)return'';var match=value.match(new RegExp('(?:^|\\s)'+escaped+'\\s+([A-Za-z][A-Za-z0-9\\s\\u2019\u0027:,.&!?()\\-]{1,160}?)\\s+'+date[0]+'(?:\\s|$)','i'));return match?match[1].trim():'';
+    if(!escaped||!date)return'';var match=value.match(new RegExp('(?:^|\\s)'+escaped+'\\s+([A-Za-z0-9][A-Za-z0-9\\s\\u2019\u0027:,.&!?()\\-]{1,160}?)\\s+'+date[0]+'(?:\\s|$)','i'));return match&&/[A-Za-z]/.test(match[1])?match[1].trim():'';
   }
   function structured(doc){
     var records=[];
@@ -17,17 +17,35 @@
     Array.prototype.forEach.call(doc.querySelectorAll('script[type="application/ld+json"]'),function(script){try{walk(JSON.parse(script.textContent));}catch(ignore){}});
     return records[0]||{};
   }
+  function breadcrumbKind(doc){
+    var kinds=[];
+    function read(node){
+      if(!node||typeof node!=='object')return;
+      if(Array.isArray(node)){node.forEach(read);return;}
+      if(node['@graph'])read(node['@graph']);
+      if(node['@type']!=='BreadcrumbList'||!Array.isArray(node.itemListElement))return;
+      node.itemListElement.forEach(function(crumb){
+        var raw=crumb&&crumb.item&&(crumb.item['@id']||crumb.item);
+        var path=typeof raw==='string'?raw.replace(/^https?:\/\/[^/]+/,''):'';
+        var kind=/^\/(?:serials|serialy|zarubezhnye-serialy|multserialy)(?:\/|$)/i.test(path)?'series':
+          /^\/(?:films|filmy|multfilmy)(?:\/|$)/i.test(path)?'movie':'';
+        if(kind&&kinds.indexOf(kind)<0)kinds.push(kind);
+      });
+    }
+    Array.prototype.forEach.call(doc.querySelectorAll('script[type="application/ld+json"]'),function(script){
+      try{read(JSON.parse(script.textContent));}catch(ignore){}
+    });
+    return kinds.length===1?kinds[0]:'';
+  }
   function present(doc){return !!doc.querySelector('.media-tile__link[href]');}
   function detail(known,s,h){
     return documentFor(known,s,h).then(function(doc){
       var schema=structured(doc),name=title(schema.name||h.get(doc,'h1'));
       if(!name||/^(?:сериал|фильм|мультфильм)\s*№\s*\d+/i.test(name))throw new Error('Сайт не передал название фильма.');
       function fact(label){var result='';h.list(doc,'.facts-list li').some(function(row){var first=row.firstElementChild;if(first&&h.text(first).toLowerCase().indexOf(label.toLowerCase())===0){result=h.text(row).slice(h.text(first).length).replace(/^\s*:\s*/,'').trim();return true;}return false;});return result;}
-      var breadcrumbs=[];
-      h.list(doc,'script[type="application/ld+json"]').forEach(function(script){try{var raw=JSON.parse(script.textContent);(raw['@graph']||[]).forEach(function(node){if(node['@type']==='BreadcrumbList')breadcrumbs=node.itemListElement||[];});}catch(ignore){}});
-      var kind=known._kind;
-      if(breadcrumbs.some(function(node){return /\/(?:serialy|multserialy)\//.test(node.item&&node.item['@id']||'');})||schema['@type']==='TVSeries'||/\s\d+(?:[-–]\d+)?\s+сезон/i.test(schema.name||''))kind='series';
-      else if(schema['@type']==='Movie'||breadcrumbs.some(function(node){return /\/(?:films|multfilmy)\//.test(node.item&&node.item['@id']||'');}))kind='movie';
+      var categoryKind=breadcrumbKind(doc),kind=known._kind;
+      if(categoryKind==='series'||schema['@type']==='TVSeries'||/\s\d+(?:[-–]\d+)?\s+сезон/i.test(schema.name||''))kind='series';
+      else if(schema['@type']==='Movie'||categoryKind==='movie')kind='movie';
       var x=Object.assign({},known.xfields),image=doc.querySelector('[itemprop="image"]'),frame=h.list(doc,'.watch-player iframe[src],iframe[src]').filter(function(node){return /\/embed\/(?:movie|series|kp)\//.test(node.getAttribute('src')||'');})[0];
       x.year=fact('Год выхода')||x.year;x.original_title=originalTitle(doc,name,x.year)||x.original_title||'';x.strana=fact('Страна');x.janre=h.get(doc,'[itemprop="genre"]');x.director=h.get(doc,'[itemprop="director"]');x.rolax=h.get(doc,'[itemprop="actors"]');x.postproduction=fact('Перевод');
       x.kp_rating=h.get(doc,'.rating-chip--kp span');x.imdb_rating=h.get(doc,'.rating-chip--imdb span');
@@ -50,5 +68,5 @@
     function worker(){if(!h.current())return Promise.reject(new Error('Источник изменён.'));if(failed||cursor>=items.length)return Promise.resolve();var at=cursor++,item=items[at],cached=h.lookup(item.id);return (cached&&cached._detail?Promise.resolve(cached):detail(item,s,h)).then(function(full){result[at]=full;return worker();},function(error){if(h.search){failures++;return worker();}failed=true;throw error;});}
     return Promise.all([worker(),worker(),worker()]).then(function(){if(!h.search)return result;var available=result.filter(Boolean);if(!available.length&&failures)throw new Error('Не удалось загрузить результаты из источника.');available._partial=failures>0;return available;});
   }
-  window.WePlayWebCatalog={present:present,detail:detail,listing:listing,cleanTitle:title,originalTitle:originalTitle};
+  window.WePlayWebCatalog={present:present,detail:detail,listing:listing,cleanTitle:title,originalTitle:originalTitle,breadcrumbKind:breadcrumbKind};
 }());
