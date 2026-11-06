@@ -21,6 +21,10 @@
   function list(root,selector){return Array.prototype.slice.call(root.querySelectorAll(selector));}
   function url(raw,base){try{var u=new URL(raw,base);return /^https?:$/.test(u.protocol)?u.href:'';}catch(ignore){return '';}}
   function catalogImage(node,base){if(!node)return'';var found='';['data-src','data-original','data-lazy-src','src','content'].some(function(key){var raw=node.getAttribute(key);if(!raw||/^(?:data|blob):/i.test(raw)||/(?:no[-_]?(?:image|poster|photo)|placeholder|spacer|blank|loading)[^/]*\.(?:gif|png|jpg|webp)/i.test(raw))return false;found=url(raw,base);return !!found;});return found;}
+  function catalogBackdrop(doc,base,poster){
+    var image=catalogImage(doc.querySelector('meta[property="og:image"],meta[property="og:image:url"]'),base);
+    return image!==poster?image:'';
+  }
   function pageURL(raw,s){
     var rawURL=url(raw,s.base);if(!rawURL)return'';var candidate=new URL(rawURL),base=new URL(s.base);
     if(candidate.hostname===base.hostname)return rawURL;
@@ -54,7 +58,7 @@
     return fetch(raw,{signal:abort.signal,credentials:credentials||'omit'}).then(function(r){if(!r.ok)throw new Error('Источник ответил с ошибкой.');return json?r.json():r.text();}).catch(function(){if(signal&&signal.aborted)throw Object.assign(new Error('Поиск отменён'),{name:'AbortError'});throw new Error(timedOut?'Источник не ответил вовремя.':'Не удалось подключиться к источнику.');}).finally(function(){clearTimeout(timer);if(signal)signal.removeEventListener('abort',cancel);});
   }
   function documentAt(raw,s,timeout,options){return (options?searchFetch(raw,false,'include',options):fetchData(raw,false,'include',timeout||8000)).then(function(html){if(s.layout==='media'&&/^\/\d+\/?$/.test(new URL(raw).pathname))delete memory['html:'+raw];return new DOMParser().parseFromString(html,'text/html');});}
-  function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,pageURL:pageURL,remember:remember,search:!!options,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
+  function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,backdropURL:catalogBackdrop,pageURL:pageURL,remember:remember,search:!!options,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
   function original(params,options){
     if(!window.WEPLAY_SETTINGS||!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Основной каталог недоступен без ключа.'));
     var q=Object.keys(params).filter(function(k){return params[k]!==undefined&&params[k]!==null;}).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);});q.push('token='+encodeURIComponent(WEPLAY_SETTINGS.apiToken));
@@ -105,6 +109,7 @@
       if(s.layout==='re')item.title=WePlayWebCatalog.cleanTitle(item.title);
       item.full_story=get(doc,s.id==='sb'?'.fdesc [itemprop="description"],.fdesc':'.lfs-intro__text,.page__text .full-text');
       var image=doc.querySelector(s.id==='sb'?'.fposter img':'.lfs-poster img,.page__poster img');x.image=catalogImage(image,s.base)||x.image;
+      x.backdrop=catalogBackdrop(doc,known._url,x.image)||x.backdrop;item._backdropParsed=true;
       x.year=fact(doc,'Год')||x.year;x.strana=fact(doc,'Страна');x.janre=s.id==='sb'?get(doc,'[itemprop="genre"]'):fact(doc,'Жанр');x.original_title=WePlayWebCatalog.originalTitle(doc,item.title,x.year)||x.original_title||'';
       x.quality=fact(doc,'Качество');x.director=get(doc,'[itemprop="director"]')||fact(doc,'Режиссёр');x.rolax=get(doc,'[itemprop="actors"]')||fact(doc,'В ролях');x.postproduction=fact(doc,'Перевод');
       var runtime=doc.querySelector('[itemprop="duration"]');x.duration=runtime&&(runtime.getAttribute('content')||runtime.getAttribute('datetime')||text(runtime))||fact(doc,'Продолжительность')||fact(doc,'Длительность')||fact(doc,'Время')||x.duration||'';
@@ -315,6 +320,12 @@
     var variant=versions(item).filter(function(v){return v._source==='pub';})[0];if(!variant)return Promise.resolve('');
     return detail(source('pub'),variant.id).then(function(j){var v=j.data._video;if(!v)return'';var q=new URLSearchParams({pub:v.publisher,id:v.titleId,aggr:v.aggregator});return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/playlist?'+q.toString(),true).then(function(p){var first=(p.items||[])[0];if(!first)return'';return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(first.vkId),true).then(function(video){return url(video.thumbUrl,'https://plapi.cdnvideohub.com/');});});}).catch(function(){return'';});
   }
+  function refreshBackdrops(item){
+    return Promise.all(versions(item).map(function(record){
+      if(record._source==='primary'||!record._detail||record._backdropParsed)return record;
+      return rawDetail(record,false,true).catch(function(){return record;});
+    }));
+  }
   function checkSource(id){
     var s=source(id);if(!s)return Promise.reject(new Error('Неизвестный источник'));
     if(ready(s))return probe(s).then(function(){return {ready:true,message:'Каталог доступен'};});
@@ -350,5 +361,5 @@
       return verify.then(function(kind){if(revision!==epoch||options.signal&&options.signal.aborted)return;if(kind){full._kind=kind;full._kindVerified=kind;full._kindVerifiedAt=Date.now();}remember(full);persist(s.id+'|'+key({action:'news',do:'get',id:full.id}),{success:true,data:full});});
     }).catch(function(){});}));
   }
-  window.WePlayCatalog={searchSources:searchSources,searchKnown:searchKnown,searchRequest:searchRequest,searchDetails:searchDetails,api:api,player:player,seasons:seasons,duration:duration,artwork:artwork,validId:validId,checkSource:checkSource,info:function(item,refresh){var records=versions(item),selected=records.filter(function(v){return String(v.id)===String(item._displayId||item.id);})[0]||records[0];return selected?rawDetail(selected,false,refresh):Promise.resolve(item);},dedupe:union.combine,same:union.same,find:union.find,versions:function(item){var seen={};return versions(item).filter(function(v){var id=v._source||'primary';if(seen[id])return false;seen[id]=true;return true;}).map(function(v){return {id:v.id,source:v._source||'primary',name:source(v._source||'primary').name};});},remember:remember,snapshot:function(){return{mode:mode,active:active&&active.id,name:mode==='auto'?'Все источники':active&&active.name,combined:mode==='auto',offline:offline,health:Object.assign({},health),sources:sources.map(function(s){return{id:s.id,name:s.name,pending:!ready(s),note:s.note};})};}};
+  window.WePlayCatalog={searchSources:searchSources,searchKnown:searchKnown,searchRequest:searchRequest,searchDetails:searchDetails,api:api,player:player,seasons:seasons,duration:duration,artwork:artwork,refreshBackdrops:refreshBackdrops,validId:validId,checkSource:checkSource,info:function(item,refresh){var records=versions(item),selected=records.filter(function(v){return String(v.id)===String(item._displayId||item.id);})[0]||records[0];return selected?rawDetail(selected,false,refresh):Promise.resolve(item);},dedupe:union.combine,same:union.same,find:union.find,versions:function(item){var seen={};return versions(item).filter(function(v){var id=v._source||'primary';if(seen[id])return false;seen[id]=true;return true;}).map(function(v){return {id:v.id,source:v._source||'primary',name:source(v._source||'primary').name};});},remember:remember,snapshot:function(){return{mode:mode,active:active&&active.id,name:mode==='auto'?'Все источники':active&&active.name,combined:mode==='auto',offline:offline,health:Object.assign({},health),sources:sources.map(function(s){return{id:s.id,name:s.name,pending:!ready(s),note:s.note};})};}};
 }());

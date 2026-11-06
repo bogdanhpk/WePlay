@@ -34,9 +34,10 @@
       x.duration=schema.duration||fact('Длительность')||fact('Продолжительность')||x.duration||'';
       x.season_count=schema.numberOfSeasons||fact('Количество сезонов')||fact('Сезонов')||x.season_count||'';x.series_status=schema.creativeWorkStatus||fact('Статус сериала')||fact('Статус')||x.series_status||'';
       x.image=h.imageURL(image,s.base)||x.image;
+      x.backdrop=(h.backdropURL?h.backdropURL(doc,known._url,x.image):'')||x.backdrop;
       x.film=frame?h.url(frame.getAttribute('src'),s.base):'';
       var kp=x.film.match(/\/embed\/kp\/(\d+)/);if(kp)x.kinopoisk_id=kp[1];
-      var item={id:known.id,title:name,_source:s.id,_url:known._url,_kind:kind,_detail:true,xfields:x,full_story:schema.description||h.get(doc,'.story-summary')};
+      var item={id:known.id,title:name,_source:s.id,_url:known._url,_kind:kind,_detail:true,_backdropParsed:true,xfields:x,full_story:schema.description||h.get(doc,'.story-summary')};
       if(h.current())h.remember(item);
       return item;
     });

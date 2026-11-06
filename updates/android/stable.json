@@ -2,13 +2,13 @@
   "schema": 1,
   "platform": "android-tv",
   "packageName": "app.weplay.tv",
-  "versionCode": 10,
-  "versionName": "1.0.9",
+  "versionCode": 11,
+  "versionName": "1.0.10",
   "minSdk": 26,
   "apk": {
-    "url": "https://raw.githubusercontent.com/bogdanhpk/WePlay/main/downloads/WePlay-AndroidTV-1.0.9.apk",
+    "url": "https://raw.githubusercontent.com/bogdanhpk/WePlay/main/downloads/WePlay-AndroidTV-1.0.10.apk",
     "size": 2761802,
-    "sha256": "5ef511c546c6c1305b160a10518629c5a60d3ebd345ca09def3a08b74111fc8d",
+    "sha256": "7c822c67d5ecb47ef51942720f785d305fc4059d7f484e6bae52e20245f700a9",
     "certificateSha256": "b239c92867f43ff2cd3cbb00af7f8e31c3eef2d4d162f2fa8b1fec1c002e8418"
   }
 }
