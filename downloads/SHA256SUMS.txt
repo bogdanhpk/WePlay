@@ -18,3 +18,4 @@ f681c0edbfee6ba8d5ecdbb4dd3e577ca49e7407ac3cb19f4e0d29e893d088a8  WePlay-Android
 8ebedd16b0b47129e4f0ad46f345aef19eef2eed0fd79b8d5d2e3320f552e1e2  WePlay-AndroidTV-1.0.12.apk
 fcb22218b214ca0bff18ae1365162777c425b5f330f5a80ae56c28d92b1f559a  WePlay-AndroidTV-1.0.13.apk
 b5616e8061404783248e12aecf4fc9904fd6aca1994bcf1e8945c13db4d5f5fe  WePlay-AndroidTV-1.0.14.apk
+a6690b1a5e5b267bd603f02b6644330a44f849a451de51f7055922ee2dab4b77  WePlay-AndroidTV-1.0.15.apk

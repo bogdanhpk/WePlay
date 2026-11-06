@@ -134,7 +134,9 @@
     if(compact&&/^https:\/\/st\.kp\.yandex\.net\/images\/(?:film_big\/|film_iphone\/iphone\d+_)\d+\.jpg$/.test(target))target=target.replace(/\/(?:film_big\/|film_iphone\/iphone\d+_)(\d+)\.jpg$/,'/film_iphone/iphone360_$1.jpg');
     var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
     var compactPublicFrame=role==='wide'&&!sized&&/^https?:\/\/[^/?#@\s]+\/[^?#\s]+$/.test(target);
-    return isTV&&remote||compactPublicFrame?[relay,target]:[target,relay];
+    var urls=isTV&&remote||compactPublicFrame?[relay,target]:[target,relay];
+    if(compact&&target!==raw)urls.push(raw);
+    return urls;
   }
   function pumpImages(){
     if(!imageQueue.length||imageRunning>=3)return;
@@ -233,10 +235,22 @@
   }
   function selectPoster(entry){
     if(entry.posterTask)return entry.posterTask;
-    entry.posterTask=entry.ready.then(function(){var originals=entry.images.posters.slice(),index=0;
-      function next(){if(index>=originals.length)return Promise.resolve(null);return firstImage(candidates(originals[index++],'poster'),'poster',true,{timeout:1800,priority:1}).then(function(value){return value?imageValue(value):next();});}
-      return next().then(function(value){if(value)return value;return window.WePlayCatalog?WePlayCatalog.info(entry.item,true).then(function(full){entry.images.posters=uniqueImages(entry.images.posters.concat(sourceImages(full,false)));originals=entry.images.posters;return next();}).catch(function(){return null;}):null;});
-    });return entry.posterTask;
+    var tried=[];
+    function availablePosters(){
+      var urls=[];
+      entry.images.posters.forEach(function(raw){candidates(raw,'poster').forEach(function(url){
+        if(tried.indexOf(url)<0){tried.push(url);urls.push(url);}
+      });});
+      return firstImage(urls,'poster',true,{timeout:1800,priority:1}).then(imageValue);
+    }
+    entry.posterTask=availablePosters().then(function(value){return value||entry.metadataTask.then(availablePosters);}).then(function(value){
+      if(value||!window.WePlayCatalog)return value;
+      return WePlayCatalog.info(entry.item,true).then(function(full){
+        entry.images.posters=uniqueImages(entry.images.posters.concat(sourceImages(full,false)));
+        return availablePosters();
+      }).catch(function(){return null;});
+    });
+    return entry.posterTask;
   }
   function firstAvailable(tasks){
     return new Promise(function(resolve){
@@ -339,8 +353,10 @@
   function cachedResource(item){return resources.filter(function(entry){return sameResource(entry,item)&&entry.images;})[0]||null;}
   function unavailable(img){img.style.visibility='hidden';img.removeAttribute('src');var parent=img.parentNode;if(!parent)return;parent.classList.remove('artwork-loading');parent.removeAttribute('aria-busy');parent.classList.add('unavailable');if(parent.classList.contains('poster-wrap')&&!parent.querySelector('.poster-fallback')){var text=document.createElement('div');text.className='poster-fallback';text.textContent=img.alt;parent.appendChild(text);}}
   function commit(img,value){
-    if(!img.isConnected||img._weplayRetired||img._weplayCommitted)return;
-    if(!value){unavailable(img);return;}
+    if(!img.isConnected||img._weplayRetired)return;
+    var previous=img._weplayCommitted;
+    if(!value){if(!previous)unavailable(img);return;}
+    if(previous&&(!previous.posterPreview||value.posterPreview))return;
     img._weplayCommitted=value;
     var role=img._weplayArt&&img._weplayArt.role;
     function reveal(){
@@ -349,16 +365,27 @@
       img.setAttribute('data-artwork-resolution',img.naturalWidth+'x'+img.naturalHeight);
       img.style.visibility='visible';img.setAttribute('data-artwork-ready','true');
       parent.classList.remove('artwork-loading');parent.classList.remove('unavailable');parent.removeAttribute('aria-busy');
-      if(landscapeRole(role))parent.classList.add('artwork-backdrop-ready');
+      parent.classList.toggle('artwork-poster-preview',!!value.posterPreview&&!isLandscape({width:img.naturalWidth,height:img.naturalHeight}));
+      if(landscapeRole(role)&&!value.posterPreview)parent.classList.add('artwork-backdrop-ready');
       var placeholder=parent.querySelector('.poster-fallback');if(placeholder)placeholder.remove();
       if(role==='hero'&&value.credit==='TVmaze'&&/^https:\/\/www\.tvmaze\.com\/shows\/\d+$/.test(value.creditURL||'')&&!parent.querySelector('.artwork-credit')){
         var credit=document.createElement('a');credit.className='artwork-credit';credit.textContent='Изображение: TVmaze';credit.href=value.creditURL;credit.tabIndex=-1;parent.appendChild(credit);
       }
     }
-    function failed(){if(img._weplayCommitted!==value||img._weplayRetired)return;img._weplayCommitted=null;unavailable(img);}
+    function failed(){
+      if(img._weplayCommitted!==value||img._weplayRetired)return;
+      img._weplayCommitted=null;
+      if(!value.posterPreview&&img._weplayPreview)commit(img,img._weplayPreview);
+      else unavailable(img);
+    }
     function loaded(){
-      if(landscapeRole(role)&&!isLandscape({width:img.naturalWidth,height:img.naturalHeight})){failed();return;}
-      validPoster(value.url,img).then(function(valid){if(!valid){failed();return;}if(img.decode)img.decode().then(reveal,failed);else reveal();});
+      if(img._weplayCommitted!==value||img._weplayRetired)return;
+      if(landscapeRole(role)&&!value.posterPreview&&!isLandscape({width:img.naturalWidth,height:img.naturalHeight})){failed();return;}
+      validPoster(value.url,img).then(function(valid){
+        if(!valid){failed();return;}
+        if(img.decode)img.decode().then(reveal,function(){if(img.naturalWidth&&img.naturalHeight)reveal();else failed();});
+        else reveal();
+      });
     }
     img.onload=loaded;img.onerror=failed;img.src=value.url;if(img.complete&&img.naturalWidth)loaded();
   }
@@ -368,8 +395,19 @@
     img._weplayStarted=true;
     var rect=img.getBoundingClientRect(),visible=rect.top<innerHeight&&rect.bottom>0&&rect.left<innerWidth&&rect.right>0;
     var role=config.role,entry=resourceFor(config.item,role==='hero'||visible);
+    var poster=Promise.resolve();
+    if(role==='wide'&&img.parentNode.classList.contains('poster-wrap')){
+      poster=new Promise(function(resolve){setTimeout(resolve,220);}).then(function(){
+        if(!img.isConnected||img._weplayRetired||img._weplayCommitted)return;
+        return resourceAsset(entry,'poster').then(function(value){
+          if(!value)return;
+          img._weplayPreview=Object.assign({},value,{posterPreview:true});
+          commit(img,img._weplayPreview);
+        });
+      });
+    }
     resourceAsset(entry,role).then(function(value){
-      commit(img,value);
+      if(value)commit(img,value);else poster.then(function(){commit(img,null);});
       if(value||!landscapeRole(role)||!img.isConnected||img._weplayRetired||!entry.landscapeSources)return;
       img._weplayArtRetry=setTimeout(function(){
         if(img.isConnected&&!img._weplayRetired)resourceAsset(entry,role).then(function(next){if(next)commit(img,next);});
