@@ -12,7 +12,8 @@
       id:id,
       source:source,
       page:start?'https://start.ru/watch/'+slug:'https://wink.ru/'+(kind==='series'?'series':'movies')+'/'+slug,
-      images:row.slice(6).map(function(path){
+      titleLogo:start&&row[7]?'https://api.start.ru'+row[7]+'?poster_type=logotype':'',
+      images:(start?[row[6]]:row.slice(6)).map(function(path){
         return start?'https://api.start.ru'+path+'?poster_type=background&dsize=1920x1080':'https://images.restream-media.net'+path;
       })
     };

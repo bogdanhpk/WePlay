@@ -13,6 +13,16 @@
     }).finally(function(){clearTimeout(timer);});
   }
   function image(path,size){return /^\/[a-zA-Z0-9]+\.(?:jpg|png|webp)$/.test(path||'')?'https://image.tmdb.org/t/p/'+size+path:'';}
+  function titleLogos(images){
+    function language(logo){return logo.iso_639_1==='ru'?0:logo.iso_639_1==='en'?1:2;}
+    return (images||[]).filter(function(logo){
+      return /^\/[a-zA-Z0-9]+\.(?:png|svg)$/.test(logo.file_path||'')&&logo.width>=200&&logo.height>=40;
+    }).sort(function(a,b){
+      return language(a)-language(b)||Number(b.vote_count)-Number(a.vote_count)||Number(b.vote_average)-Number(a.vote_average)||b.width-a.width;
+    }).slice(0,3).map(function(logo){
+      return 'https://image.tmdb.org/t/p/'+(/\.svg$/.test(logo.file_path)?'original':'w500')+logo.file_path;
+    });
+  }
   function normal(value){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(value||''));}
   function collectionBackdrop(item){
     var index=window.WEPLAY_COLLECTIONS,kind=WePlayCatalogUnion.kind(item);
@@ -62,7 +72,7 @@
       var backgrounds=(data.images&&data.images.backdrops||[]).filter(function(img){return img.width>=1280&&img.width/img.height>=1.45&&img.width/img.height<=2.6&&image(img.file_path,'original');}).sort(function(a,b){return Number(a.iso_639_1!==null)-Number(b.iso_639_1!==null)||Math.abs(a.aspect_ratio-16/9)-Math.abs(b.aspect_ratio-16/9)||Number(b.vote_count)-Number(a.vote_count)||Number(b.vote_average)-Number(a.vote_average)||b.width-a.width;}).slice(0,4).map(function(img){return image(img.file_path,'original');});
       var defaultBackground=image(data.backdrop_path,'original');if(defaultBackground&&backgrounds.indexOf(defaultBackground)<0)backgrounds.push(defaultBackground);
       var page='https://www.themoviedb.org/'+type+'/'+data.id,cast=(data.credits&&data.credits.cast||[]).slice(0,12).map(function(person){return{id:String(person.id),name:person.name||person.original_name||'',image:image(person.profile_path,'h632'),source:'TMDB',sourceURL:page};}).filter(function(person){return !!person.name;});
-      return{tmdbAPI:true,tmdbId:String(data.id),imdbId:imdb,lookupTitle:data.original_title||data.original_name||data.title||data.name,poster:image(data.poster_path,'original'),posterThumb:image(data.poster_path,'w342'),background:backgrounds[0]||'',backgrounds:backgrounds,backgroundThumb:backgrounds[0]?backgrounds[0].replace('/original/','/w1280/'):'',backgroundSource:'TMDB',backgroundCredit:page,source:'TMDB',cast:cast,castPage:page,series:type==='tv'?{seasons:data.number_of_seasons||null,status:WePlaySeries.status(data.status),at:Date.now()}:null};
+      return{tmdbAPI:true,tmdbId:String(data.id),imdbId:imdb,lookupTitle:data.original_title||data.original_name||data.title||data.name,poster:image(data.poster_path,'original'),posterThumb:image(data.poster_path,'w342'),background:backgrounds[0]||'',backgrounds:backgrounds,backgroundThumb:backgrounds[0]?backgrounds[0].replace('/original/','/w1280/'):'',backgroundSource:'TMDB',backgroundCredit:page,source:'TMDB',titleLogos:titleLogos(data.images&&data.images.logos),cast:cast,castPage:page,series:type==='tv'?{seasons:data.number_of_seasons||null,status:WePlaySeries.status(data.status),at:Date.now()}:null};
     }).finally(function(){delete pending[key];});return pending[key];
   }
   function nextPart(item){
@@ -75,5 +85,5 @@
       });
     });
   }
-  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,collectionBackdrop:collectionBackdrop,nextPart:nextPart};
+  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,collectionBackdrop:collectionBackdrop,nextPart:nextPart,titleLogos:titleLogos};
 }());

@@ -331,6 +331,44 @@
     return entry.assets[role];
   }
   function asset(item,role,priority){return resourceAsset(resourceFor(item,priority),role);}
+  function attachTitle(heading,item){
+    if(!heading.isConnected)return;
+    var entry=resourceFor(item,true),label=heading.textContent;
+    function select(urls){
+      return uniqueImages(urls).reduce(function(previous,url){
+        return previous.then(function(value){
+          if(value)return value;
+          return loadImage(url,1,1800).then(function(image){
+            return image.width>=120&&image.height>=32&&image.width/image.height>=.55?image:null;
+          },function(){return null;});
+        });
+      },Promise.resolve(null));
+    }
+    function logos(data){return data&&data.titleLogos||[];}
+    if(!entry.titleLogoTask){
+      var domestic=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(item)).map(function(record){return record.titleLogo;}):[];
+      var packaged=window.WePlayTMDB&&WePlayTMDB.indexed(item),immediate=domestic.concat(logos(packaged),logos(entry.metadata));
+      entry.titleLogoTask=select(immediate).then(function(value){
+        return value||entry.metadataTask.then(function(){
+          var pendingLogos=logos(entry.metadata).filter(function(url){return immediate.indexOf(url)<0;}),imdb=entry.identity.ids.imdb||entry.metadata&&entry.metadata.imdbId;
+          if(/^tt\d+$/.test(imdb||''))pendingLogos.push('https://images.metahub.space/logo/medium/'+imdb+'/img');
+          return select(pendingLogos);
+        });
+      }).then(function(value){
+        if(!value)entry.titleLogoTask=null;
+        return value&&value.image;
+      },function(){entry.titleLogoTask=null;return null;});
+    }
+    entry.titleLogoTask.then(function(original){
+      if(!original||!heading.isConnected||heading.closest('.slide-leaving'))return;
+      var image=original.cloneNode();image.alt=label;image.className='media-title-logo';image.draggable=false;
+      function show(){
+        if(!heading.isConnected||heading.closest('.slide-leaving'))return;
+        heading.textContent='';heading.appendChild(image);heading.classList.add('has-title-logo');
+      }
+      if(image.complete&&image.naturalWidth)show();else image.onload=show;
+    });
+  }
   function resolveResource(item,options){var entry=resourceFor(item,true);if(!options||!options.actors)return entry.ready;return resourceActors(entry).then(function(){return entry;});}
   function resourceActors(entry){
     if(entry.actorTask)return entry.actorTask;
@@ -463,5 +501,5 @@
     if(img._weplayProfile||!imageURL(raw,'h632')&&!/^https:\/\/static\.tvmaze\.com\/uploads\/images\/(?:original_untouched|medium_portrait)\/\d+\/\d+\.(?:jpg|png|webp)$/.test(raw||''))return;img._weplayProfile=true;img.style.visibility='hidden';if(img.parentNode){img.parentNode.classList.add('artwork-loading');img.parentNode.setAttribute('aria-busy','true');}
     function run(){if(!img.isConnected||img._weplayRetired)return;if(actor.photoRetry&&Date.now()<actor.photoRetry){unavailable(img);return;}if(!actor.photoTask)actor.photoTask=firstImage(candidates(raw,'person'),'person',true).then(function(value){if(!value){actor.photoTask=null;actor.photoRetry=Date.now()+30000;}return imageValue(value);});actor.photoTask.then(function(value){commit(img,value);});}if(img.isConnected)run();else requestAnimationFrame(run);
   }
-  window.WePlayArtwork={get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;stopArtworkRetry(img);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
+  window.WePlayArtwork={get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;stopArtworkRetry(img);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},attachTitle:attachTitle,apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
 }());

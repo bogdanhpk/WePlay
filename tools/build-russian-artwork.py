@@ -28,6 +28,7 @@ def pages():
         "start-med": "mediator",
         "start-zhizn": "zhit-zhizn",
         "start-posledniy": "posledniy-bogatyr",
+        "start-sp": "slovo-pacana",
     }.items():
         yield name, f"https://start.ru/watch/{slug}"
 
@@ -60,7 +61,10 @@ def start_rows(html):
         background = (item.get("background") or {}).get("image_15x", "")
         image = re.fullmatch(r"(/poster/[0-9a-f-]+/\d+)\?poster_type=background&dsize=1920x1080", background)
         if image:
-            yield ("START", slug, kind, item["title"], year, str(item.get("kinopoisk_id") or ""), image[1])
+            logotype = (item.get("logotype") or {}).get("image_15x", "")
+            logo = re.fullmatch(r"(/poster/[0-9a-f-]+/\d+)\?poster_type=logotype", logotype)
+            yield ("START", slug, kind, item["title"], year, str(item.get("kinopoisk_id") or ""),
+                   image[1], logo[1] if logo else "")
 
 
 def wink_rows(html):
