@@ -129,6 +129,7 @@
   function originalAssetURL(raw){try{var url=new URL(raw);return url.hostname==='wsrv.nl'&&url.searchParams.get('url')||raw;}catch(ignore){return raw;}}
   function candidates(raw,role){
     if(!raw)return[];var size=spec(role),compact=role==='wide',sized=imageURL(raw,role==='person'?'h632':role==='hero'?'original':'w780'),target=sized||raw;
+    if(compact&&/^https:\/\/api\.start\.ru\/poster\/[^?]+\?poster_type=background&dsize=1920x1080$/.test(target))return [target.replace('1920x1080','640x360'),target];
     if(compact&&/^https:\/\/m\.media-amazon\.com\//.test(target))target=target.replace(/_SX\d+\./,'_SX'+size.width+'.');
     if(compact&&/^https:\/\/st\.kp\.yandex\.net\/images\/(?:film_big\/|film_iphone\/iphone\d+_)\d+\.jpg$/.test(target))target=target.replace(/\/(?:film_big\/|film_iphone\/iphone\d+_)(\d+)\.jpg$/,'/film_iphone/iphone360_$1.jpg');
     var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
@@ -270,6 +271,12 @@
       if(!source&&stored&&stored.identity&&!stored.posterFallback&&sameResource(stored,entry.item))source=stored.sourceURL;
       return landscape(uniqueImages([source]),'catalog');
     }
+    function russian(item){
+      var records=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(item)):[];
+      return records.reduce(function(previous,record){
+        return previous.then(function(value){return value||landscape(record.images,record.source,record.page);});
+      },Promise.resolve(null));
+    }
     function listed(){return landscape(entry.images.landscapes,entry.images.source,entry.images.creditURL);}
     function catalog(item){return landscape(uniqueImages(sourceImages(item).concat(entry.metadata&&entry.metadata.poster||[])),'catalog');}
     function alternatives(item){
@@ -288,11 +295,13 @@
       }
       return firstAvailable(tasks);
     }
-    return (hero?listed():shared().then(function(value){return value||listed();})).then(function(value){
+    return russian(entry.item).then(function(value){
+      return value||(hero?listed():shared().then(function(sharedValue){return sharedValue||listed();}));
+    }).then(function(value){
       if(value)return value;
       var pending=[entry.metadataTask.then(listed),catalog(entry.item),entry.ready.then(function(){
         return backdropDetails(entry,refresh).then(function(full){
-          return listed().then(function(found){return found||catalog(full);}).then(function(found){return found||alternatives(full);});
+          return russian(full).then(function(found){return found||listed();}).then(function(found){return found||catalog(full);}).then(function(found){return found||alternatives(full);});
         });
       })];
       if(!hero&&entry.assets.hero)pending.push(entry.assets.hero.then(shared));
