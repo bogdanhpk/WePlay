@@ -45,12 +45,12 @@
     while(keys.length>24)evict();
     try{var value=JSON.stringify({entries:stored});while(value.length>400000&&keys.length>1){evict();value=JSON.stringify({entries:stored});}localStorage.setItem(STORE,value);}catch(ignore){}
   }
-  function fetchData(raw,json,credentials,timeout){
+  function fetchData(raw,json,credentials,timeout,reload){
     var cacheKey=(json?'json:':'html:')+raw,cached=memory[cacheKey];
-    if(cached&&Date.now()-cached.at<60000)return Promise.resolve(cached.data);
+    if(!reload&&cached&&Date.now()-cached.at<60000)return Promise.resolve(cached.data);
     if(pending[cacheKey])return pending[cacheKey];
     var abort=new AbortController(),timer=setTimeout(function(){abort.abort();},timeout||12000);
-    pending[cacheKey]=fetch(raw,{signal:abort.signal,credentials:credentials||'omit'}).then(function(r){if(!r.ok)throw new Error('Сайт ответил: '+r.status);return json?r.json():r.text();}).then(function(data){memory[cacheKey]={at:Date.now(),data:data};return data;}).catch(function(e){throw new Error(e.name==='AbortError'?'Сайт не ответил вовремя.':'Не удалось подключиться к источнику.');}).finally(function(){clearTimeout(timer);delete pending[cacheKey];});
+    pending[cacheKey]=fetch(raw,{signal:abort.signal,credentials:credentials||'omit',cache:reload?'no-cache':'default'}).then(function(r){if(!r.ok)throw new Error('Сайт ответил: '+r.status);return json?r.json():r.text();}).then(function(data){memory[cacheKey]={at:Date.now(),data:data};return data;}).catch(function(e){throw new Error(e.name==='AbortError'?'Сайт не ответил вовремя.':'Не удалось подключиться к источнику.');}).finally(function(){clearTimeout(timer);delete pending[cacheKey];});
     return pending[cacheKey];
   }
   function searchFetch(raw,json,credentials,options){
@@ -58,12 +58,12 @@
     var abort=new AbortController(),timedOut=false,timer=setTimeout(function(){timedOut=true;abort.abort();},Math.min(remaining,3000));function cancel(){abort.abort();}if(signal)signal.addEventListener('abort',cancel);
     return fetch(raw,{signal:abort.signal,credentials:credentials||'omit'}).then(function(r){if(!r.ok)throw new Error('Источник ответил с ошибкой.');return json?r.json():r.text();}).catch(function(){if(signal&&signal.aborted)throw Object.assign(new Error('Поиск отменён'),{name:'AbortError'});throw new Error(timedOut?'Источник не ответил вовремя.':'Не удалось подключиться к источнику.');}).finally(function(){clearTimeout(timer);if(signal)signal.removeEventListener('abort',cancel);});
   }
-  function documentAt(raw,s,timeout,options){return (options?searchFetch(raw,false,'include',options):fetchData(raw,false,'include',timeout||8000)).then(function(html){if(s.layout==='media'&&/^\/\d+\/?$/.test(new URL(raw).pathname))delete memory['html:'+raw];return new DOMParser().parseFromString(html,'text/html');});}
-  function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,backdropURL:catalogBackdrop,pageURL:pageURL,remember:remember,search:!!options,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
+  function documentAt(raw,s,timeout,options){return (options&&!options.reload?searchFetch(raw,false,'include',options):fetchData(raw,false,'include',timeout||8000,options&&options.reload)).then(function(html){if(s.layout==='media'&&/^\/\d+\/?$/.test(new URL(raw).pathname))delete memory['html:'+raw];return new DOMParser().parseFromString(html,'text/html');});}
+  function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,backdropURL:catalogBackdrop,pageURL:pageURL,remember:remember,search:!!options&&!options.reload,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
   function original(params,options){
     if(!window.WEPLAY_SETTINGS||!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Основной каталог недоступен без ключа.'));
     var q=Object.keys(params).filter(function(k){return params[k]!==undefined&&params[k]!==null;}).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);});q.push('token='+encodeURIComponent(WEPLAY_SETTINGS.apiToken));
-    var raw=sources[0].base+'api.php?'+q.join('&');return (options?searchFetch(raw,true,'omit',options):fetchData(raw,true,'omit',8000)).then(function(j){if(!j||j.success===false||!j.data)throw new Error('Основной каталог недоступен.');return j;});
+    var raw=sources[0].base+'api.php?'+q.join('&');return (options&&!options.reload?searchFetch(raw,true,'omit',options):fetchData(raw,true,'omit',8000,options&&options.reload)).then(function(j){if(!j||j.success===false||!j.data)throw new Error('Основной каталог недоступен.');return j;});
   }
   function card(node,s){
     var a=node.querySelector(s.id==='sb'?'a.th-in[href]':'a.item__title[href]');if(!a)return null;
@@ -174,13 +174,13 @@
       if(saved){active=source(saved.split('|')[0]);offline=true;notify();return register(stored[saved].data);}throw e;
     });
   }
-  function rawDetail(item,verify,refresh){
+  function rawDetail(item,verify,refresh,reload){
     var record=index[String(item.id)]||item,s=source(record._source||'primary');
-    var loaded=record._detail&&!refresh?Promise.resolve(record):requestFrom(s,{action:'news',do:'get',id:record.id},true,!!refresh).then(function(j){var d=j.data;return Array.isArray(d)?d[0]:d.item||d.news||d;});
+    var loaded=record._detail&&!refresh?Promise.resolve(record):requestFrom(s,{action:'news',do:'get',id:record.id},true,!!refresh,reload?{reload:true}:undefined).then(function(j){var d=j.data;return Array.isArray(d)?d[0]:d.item||d.news||d;});
     return loaded.then(function(full){return verify||!union.kind(full)&&full._video?verifyKind(full):full;});
   }
   function playerURL(item){var raw=union.fields(item).film;if(!raw)throw new Error('Видео для этого фильма пока недоступно.');var u=new URL(raw),origin=source(item._source||'primary');u.searchParams.set('host',origin?new URL(origin.base).hostname:'lord.kim');return u.href;}
-  function playlist(item,timeout){var v=item._video,q=new URLSearchParams({pub:v.publisher,id:v.titleId,aggr:v.aggregator});return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/playlist?'+q.toString(),true,'omit',timeout);}
+  function playlist(item,timeout,reload){var v=item._video,q=new URLSearchParams({pub:v.publisher,id:v.titleId,aggr:v.aggregator});return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/playlist?'+q.toString(),true,'omit',timeout,reload);}
   function episodic(episodes){return episodes.some(function(e){return e.season!==undefined&&e.season!==null&&e.season!==''&&isFinite(Number(e.season))&&Number(e.season)>=0&&e.episode!==undefined&&e.episode!==null&&e.episode!==''&&Number(e.episode)>0;});}
   function verifyKind(full){
     var now=Date.now();if(full._kindVerified&&now-(full._kindVerifiedAt||0)<86400000||now-(full._kindCheckedAt||0)<60000)return Promise.resolve(full);
@@ -317,21 +317,21 @@
       if(!episodes.length)throw new Error('В этом источнике пока нет доступного видео.');return{payload:{episodes:episodes},transport:'plain',resolveEpisode:videoSource};
     });
   }
-  function artwork(item){
+  function artwork(item,reload){
     var variant=versions(item).filter(function(v){return v._source==='pub';})[0];if(!variant)return Promise.resolve('');
     return rawDetail(variant,false).then(function(record){
       if(!record._video)return '';
-      return playlist(record,4000).then(function(data){
+      return playlist(record,4000,reload).then(function(data){
         var first=(data.items||[]).find(function(row){return !!row.vkId;});
         if(!first)return '';
-        return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(first.vkId),true,'omit',4000).then(function(video){return url(video.thumbUrl,'https://plapi.cdnvideohub.com/');});
+        return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(first.vkId),true,'omit',4000,reload).then(function(video){return url(video.thumbUrl,'https://plapi.cdnvideohub.com/');});
       });
     }).catch(function(){return '';});
   }
-  function refreshBackdrops(item){
+  function refreshBackdrops(item,reload){
     return Promise.all(versions(item).map(function(record){
-      if(record._detail&&(record._source==='primary'||record._backdropParsed===2))return record;
-      return rawDetail(record,false,!!record._detail).catch(function(){return record;});
+      if(!reload&&record._detail&&(record._source==='primary'||record._backdropParsed===2))return record;
+      return rawDetail(record,false,reload||!!record._detail,reload).catch(function(){return record;});
     }));
   }
   function checkSource(id){

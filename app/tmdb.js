@@ -46,8 +46,8 @@
     var found=index.entries.filter(function(entry){if(entry.kind!==kind||entry.year!==year||!entry.art||!entry.art.tmdbAPI)return false;var other=entry.ids||{};if(Object.keys(ids).some(function(key){return other[key]&&other[key]!==ids[key];}))return false;return Object.keys(ids).some(function(key){return other[key]===ids[key];})||names.some(function(name){return entry.names.indexOf(name)>=0;});});
     var unique={};found.forEach(function(entry){unique[entry.art.tmdbId]=entry;});var keys=Object.keys(unique);return keys.length===1?JSON.parse(JSON.stringify(unique[keys[0]].art)):null;
   }
-  function artwork(item){
-    var packaged=indexed(item);if(packaged)return Promise.resolve(packaged);
+  function artwork(item,refresh){
+    var packaged=indexed(item);if(packaged&&(!refresh||!token()))return Promise.resolve(packaged);
     var fields=WePlayCatalogUnion.fields(item),ids=WePlayCatalogUnion.identifiers(item),kind=WePlayCatalogUnion.kind(item),type=kind==='series'?'tv':kind==='movie'?'movie':'',year=(String(fields.year||'').match(/(?:19|20)\d{2}/)||[])[0]||'',names=[normal(item.title),normal(fields.original_title)].filter(Boolean),key=type+':'+(ids.tmdb||ids.imdb||names.join('|')+':'+year);
     var selectedID=null;if(!type||!ids.tmdb&&!ids.imdb&&!year)return Promise.reject(new Error('TMDB identity incomplete'));if(pending[key])return pending[key];
     function dated(record){var date=type==='tv'?record.first_air_date:record.release_date;return !year||String(date||'').slice(0,4)===year;}
