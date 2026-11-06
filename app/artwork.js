@@ -8,7 +8,7 @@
   var resources=[],people={},FAMILY_KEY='weplay.artwork.families.v1',families={};
   try{families=JSON.parse(localStorage.getItem(FAMILY_KEY)||'{}')||{};}catch(ignore){}
   var MATCH_POLICY='exact-title-type-year-v1';
-  var imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[];
+  var imageQueue=[],imageRunning=0,imageWake=null,imageOrder=0,decoded=[],imagePending=Object.create(null);
   try{cache=JSON.parse(localStorage.getItem(KEY)||'{}')||{};Object.keys(cache).forEach(function(k){if(!cache[k]||!cache[k].data||!cache[k].data.match||cache[k].data.match.policy!==MATCH_POLICY)delete cache[k];});localStorage.setItem(KEY,JSON.stringify(cache));}catch(ignore){}
   function normal(s){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(s));}
   function identity(item){var x=WePlayCatalogUnion.fields(item),year=String(x.year||'').match(/(?:19|20)\d{2}/);return{policy:MATCH_POLICY,kind:WePlayCatalogUnion.kind(item),year:year?year[0]:'',names:[normal(item.title),normal(x.original_title)].filter(Boolean),ids:WePlayCatalogUnion.identifiers(item)};}
@@ -123,7 +123,7 @@
   }
   function roleOf(full){return full?'hero':'wide';}
   function spec(role){return role==='hero'?{width:2560,min:1280,height:0}:role==='person'?{width:384,min:192,height:192}:{width:640,min:480,height:180};}
-  function isLandscape(value){var ratio=value.width/value.height;return ratio>=1.45&&ratio<=2.6;}
+  function isLandscape(value){var ratio=value.width/value.height;return ratio>=1.3&&ratio<=3;}
   function landscapeRole(role){return role==='hero'||role==='wide';}
   function sufficient(value,role){var size=spec(role);return value&&value.width>=size.min&&value.height>=size.height&&(!landscapeRole(role)||isLandscape(value));}
   function originalAssetURL(raw){try{var url=new URL(raw);return url.hostname==='wsrv.nl'&&url.searchParams.get('url')||raw;}catch(ignore){return raw;}}
@@ -134,7 +134,8 @@
     if(compact&&/^https:\/\/st\.kp\.yandex\.net\/images\/(?:film_big\/|film_iphone\/iphone\d+_)\d+\.jpg$/.test(target))target=target.replace(/\/(?:film_big\/|film_iphone\/iphone\d+_)(\d+)\.jpg$/,'/film_iphone/iphone360_$1.jpg');
     var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
     var compactPublicFrame=role==='wide'&&!sized&&/^https?:\/\/[^/?#@\s]+\/[^?#\s]+$/.test(target);
-    var urls=isTV&&remote||compactPublicFrame?[relay,target]:[target,relay];
+    var directFrame=/^https:\/\/(?:images\.restream-media\.net|images\.metahub\.space)\//.test(target);
+    var urls=!directFrame&&(isTV&&remote||compactPublicFrame)?[relay,target]:[target,relay];
     if(compact&&target!==raw)urls.push(raw);
     return urls;
   }
@@ -156,10 +157,12 @@
   }
   function loadImage(url,priority,timeout,guard){
     var retained=decoded.filter(function(entry){return entry.url===url;})[0];if(retained){decoded.splice(decoded.indexOf(retained),1);decoded.push(retained);return Promise.resolve(retained);}
-    return new Promise(function(resolve,reject){imageQueue.push({resolve:resolve,reject:reject,priority:Number(priority)||0,order:imageOrder++,run:function(){if(guard&&!guard())return Promise.reject(new Error('Image temporarily unavailable'));return new Promise(function(done,fail){var image=new Image(),finished=false,timer=setTimeout(function(){finish(false);},timeout||8000);
+    if(imagePending[url])return imagePending[url];
+    imagePending[url]=new Promise(function(resolve,reject){imageQueue.push({resolve:resolve,reject:reject,priority:Number(priority)||0,order:imageOrder++,run:function(){if(guard&&!guard())return Promise.reject(new Error('Image temporarily unavailable'));return new Promise(function(done,fail){var image=new Image(),finished=false,timer=setTimeout(function(){finish(false);},timeout||8000);
       function finish(ok){if(finished)return;finished=true;clearTimeout(timer);image.onload=null;image.onerror=null;if(!ok){image.removeAttribute('src');fail(new Error('Image unavailable'));return;}var value={url:url,width:image.naturalWidth,height:image.naturalHeight,image:image};decoded.push(value);while(decoded.length>8)decoded.shift();done(value);}
       image.onload=function(){validPoster(url,image).then(function(valid){if(!valid){finish(false);return;}if(image.decode)image.decode().then(function(){finish(true);},function(){finish(!!image.naturalWidth);});else finish(true);},function(){finish(false);});};image.onerror=function(){finish(false);};image.src=url;
-    });}});imageQueue.sort(function(a,b){return b.priority-a.priority||a.order-b.order;});pumpImages();});
+    });}});imageQueue.sort(function(a,b){return b.priority-a.priority||a.order-b.order;});pumpImages();}).finally(function(){delete imagePending[url];});
+    return imagePending[url];
   }
   function firstImage(urls,role,strict,options){var at=0;options=options||{};function next(){if(at>=urls.length)return Promise.resolve(null);return loadImage(urls[at++],options.priority===undefined?(role==='hero'?2:role==='person'?1:0):options.priority,options.timeout,options.guard).then(function(value){if(strict&&!sufficient(value,role)){if(options.alternative)options.alternative(value);return next();}return value;},next);}return next();}
   function sourceImages(item,fields){
@@ -246,7 +249,8 @@
     return entry.backdropRefresh;
   }
   function selectLandscape(entry,role,refresh){
-    var hero=role==='hero',tried=[],fallback=null;
+    var hero=role==='hero',tried=[],fallback=null,fallbackTimer,offerFallback;
+    var fallbackTask=new Promise(function(resolve){offerFallback=resolve;});
     function landscape(originals,source,creditURL){
       var urls=[],rawByURL=Object.create(null),previous=families[entry.key];
       originals=originals.slice();
@@ -263,7 +267,10 @@
       });
       function selected(value){return {value:Object.assign({},value,{credit:source,creditURL:creditURL}),sourceURL:rawByURL[value.url]};}
       return firstImage(urls,role,true,{timeout:hero?2600:1900,priority:hero?3:1,alternative:function(value){
-        if(hero&&value.width>=960&&isLandscape(value)&&(!fallback||fallback.value.width<value.width))fallback=selected(value);
+        if(value.width>=(hero?640:320)&&value.height>=160&&isLandscape(value)&&(!fallback||fallback.value.width<value.width)){
+          fallback=selected(value);
+          if(!fallbackTimer)fallbackTimer=setTimeout(function(){offerFallback(fallback);},1200);
+        }
       }}).then(function(value){return value?selected(value):null;});
     }
     function shared(){
@@ -271,14 +278,20 @@
       if(!source&&stored&&stored.identity&&!stored.posterFallback&&sameResource(stored,entry.item))source=stored.sourceURL;
       return landscape(uniqueImages([source]),'catalog');
     }
-    function russian(item){
-      var records=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(item)):[];
+    function domesticRecords(item){
+      return window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(item)):[];
+    }
+    function russian(records){
       return records.reduce(function(previous,record){
         return previous.then(function(value){return value||landscape(record.images,record.source,record.page);});
       },Promise.resolve(null));
     }
     function listed(){return landscape(entry.images.landscapes,entry.images.source,entry.images.creditURL);}
     function catalog(item){return landscape(uniqueImages(sourceImages(item).concat(entry.metadata&&entry.metadata.poster||[])),'catalog');}
+    function imdbBackdrop(item){
+      var id=WePlayCatalogUnion.identifiers(item).imdb||entry.metadata&&entry.metadata.imdbId;
+      return /^tt\d+$/.test(id||'')?landscape(['https://images.metahub.space/background/large/'+id+'/img'],'Cinemeta'):Promise.resolve(null);
+    }
     function alternatives(item){
       var tasks=[];
       if(!entry.alternateBackdropTask)entry.alternateBackdropTask=metadataTask('cinemeta-backdrop:'+entry.key,function(){
@@ -295,18 +308,27 @@
       }
       return firstAvailable(tasks);
     }
-    return russian(entry.item).then(function(value){
-      return value||(hero?listed():shared().then(function(sharedValue){return sharedValue||listed();}));
-    }).then(function(value){
-      if(value)return value;
-      var pending=[entry.metadataTask.then(listed),catalog(entry.item),entry.ready.then(function(){
-        return backdropDetails(entry,refresh).then(function(full){
-          return russian(full).then(function(found){return found||listed();}).then(function(found){return found||catalog(full);}).then(function(found){return found||alternatives(full);});
-        });
-      })];
-      if(!hero&&entry.assets.hero)pending.push(entry.assets.hero.then(shared));
-      return firstAvailable(pending);
-    }).then(function(selection){
+    function otherSources(){
+      return shared().then(function(value){return value||listed();}).then(function(value){
+        if(value)return value;
+        var pending=[imdbBackdrop(entry.item),entry.metadataTask.then(function(){return firstAvailable([listed(),imdbBackdrop(entry.item)]);}),catalog(entry.item),entry.ready.then(function(){
+          return backdropDetails(entry,refresh).then(function(full){
+            return firstAvailable([russian(domesticRecords(full)),listed(),catalog(full),imdbBackdrop(full),alternatives(full)]);
+          });
+        })];
+        if(!hero&&entry.assets.hero)pending.push(entry.assets.hero.then(shared));
+        return firstAvailable(pending);
+      });
+    }
+    var records=domesticRecords(entry.item),selectionTask;
+    if(records.length){
+      var domestic=russian(records);
+      selectionTask=Promise.race([domestic,new Promise(function(resolve){setTimeout(resolve,850);})]).then(function(value){
+        return value||firstAvailable([domestic,otherSources()]);
+      });
+    }else selectionTask=otherSources();
+    return Promise.race([selectionTask,fallbackTask]).then(function(selection){
+      clearTimeout(fallbackTimer);
       selection=selection||fallback;
       if(!selection)return null;
       rememberFamily(entry,selection.sourceURL);
