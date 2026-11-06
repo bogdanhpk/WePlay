@@ -226,18 +226,26 @@
   }
   function selectHero(entry){
     var tried=[];
-    function landscape(){
+    function landscape(originals){
       var urls=[];
-      entry.images.landscapes.forEach(function(raw){
+      originals.forEach(function(raw){
         candidates(raw,'hero').concat(imageURL(raw,'w1280')||[]).forEach(function(url){
           if(tried.indexOf(url)<0){tried.push(url);urls.push(url);}
         });
       });
+      if(urls.length)entry.heroSourceFound=true;
       return firstImage(urls,'hero',true,{timeout:2600,priority:3}).then(function(value){
         return value&&Object.assign(value,{credit:entry.images.source,creditURL:entry.images.creditURL});
       });
     }
-    return landscape().then(function(value){return value||entry.metadataTask.then(landscape);});
+    return landscape(entry.images.landscapes).then(function(value){
+      return value||entry.metadataTask.then(function(){return landscape(entry.images.landscapes);});
+    }).then(function(value){
+      if(value)return value;
+      return selectPoster(entry).then(function(selection){
+        return selection&&!selection.posterFallback?landscape([selection.sourceURL]):null;
+      });
+    });
   }
   function resourceAsset(entry,role){
     if(entry.assets[role])return entry.assets[role];
@@ -276,7 +284,7 @@
     hero.then(function(value){
       if(value){commit(img,value);return;}
       fallback.then(function(){commit(img,null);});
-      if(!img.isConnected||img._weplayRetired||!entry.images.landscapes.length)return;
+      if(!img.isConnected||img._weplayRetired||!entry.heroSourceFound)return;
       img._weplayArtRetry=setTimeout(function(){
         if(img.isConnected&&!img._weplayRetired)resourceAsset(entry,'hero').then(function(next){if(next)commit(img,next);});
       },Math.max(0,entry.retryAt.hero-Date.now())+50);
