@@ -9,8 +9,8 @@ WePlay — приложение для просмотра фильмов, сер
 | Платформа | Требования | Установщик | Инструкция |
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
-| LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.3](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.3_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
-| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.26](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.26.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+| LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.4](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.4_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
+| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.27](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.27.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 
@@ -79,7 +79,7 @@ WePlay — приложение для просмотра фильмов, сер
 
 ### LG webOS
 
-Один раз установите IPK **1.0.3** поверх текущей версии. После этого WePlay загружает подписанные обновления интерфейса из GitHub. Когда обновление готово, рядом с «Поддержать» появится кнопка **«Доступна новая версия»**. [Инструкция для LG](docs/INSTALL_WEBOS.md).
+Один раз установите IPK **1.0.4** поверх текущей версии. После этого WePlay загружает подписанные обновления интерфейса из GitHub. Когда обновление готово, рядом с «Поддержать» появится кнопка **«Доступна новая версия»**. [Инструкция для LG](docs/INSTALL_WEBOS.md).
 
 ## Совместимость и данные
 

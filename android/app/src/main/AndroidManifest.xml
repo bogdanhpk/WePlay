@@ -5,8 +5,8 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <application android:label="WePlay" android:icon="@drawable/weplay_icon"
-        android:banner="@drawable/tv_banner" android:theme="@style/AppTheme"
+    <application android:label="WePlay" android:icon="@mipmap/ic_launcher"
+        android:banner="@mipmap/tv_banner" android:theme="@style/AppTheme"
         android:hardwareAccelerated="true" android:allowBackup="false"
         android:usesCleartextTraffic="false" android:supportsRtl="true">
         <provider android:name="androidx.core.content.FileProvider"

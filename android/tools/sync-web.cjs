@@ -30,7 +30,6 @@ fs.copyFileSync(path.join(root,'platform/android.js'),path.join(target,'android.
 fs.writeFileSync(path.join(target,'settings.js'),"window.WEPLAY_SETTINGS = { apiToken: '', tmdbReadToken: '' };\n");
 fs.writeFileSync(path.join(target,'index.html'),html);
 fs.cpSync(path.join(root,'licenses'),path.join(target,'licenses'),{recursive:true});
-fs.copyFileSync(path.join(source,'weplay-icon-orange.png'),path.join(root,'app/src/main/res/drawable/weplay_icon.png'));
 const manifest={platform:'android-tv',version:version.versionName,interfaceVersion:version.interfaceVersion,files:[]};
 for(const file of [...files,'settings.js','android.js','index.html',...fs.readdirSync(path.join(root,'licenses')).map(name=>'licenses/'+name)].sort()){
   const bytes=fs.readFileSync(path.join(target,file));manifest.files.push({path:file,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});
