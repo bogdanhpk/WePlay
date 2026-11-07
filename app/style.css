@@ -126,7 +126,7 @@ nav button:focus{color:#111;background:#f5f5f5;outline:none;box-shadow:none;font
 .description{font-size:24px;line-height:36px;color:#bcbcbc;white-space:pre-line;overflow-wrap:break-word;max-width:1040px;margin:0 0 32px}
 .facts{font-size:20px;line-height:32px;color:#929292;margin:16px 0 0;max-width:1040px}
 .source-caption{color:#a0a0a0;font-size:18px;line-height:28px;margin:8px 0 24px}
-#player{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:#000;z-index:20}
+#player{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;margin:0;padding:0;outline:none;overflow:hidden;background:#000;z-index:20}
 #player-surface{position:absolute;top:0;left:0;width:100%;height:100%;border:0;z-index:1}
 #player-toolbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;padding:32px 48px;background:#181818;z-index:4}
 #player-toolbar button{border:0;background:#313131;color:#fff;border-radius:12px;padding:12px 24px;margin-right:16px;font-size:20px;line-height:28px}
