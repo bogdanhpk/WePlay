@@ -294,13 +294,58 @@
     seasonPending[key]=Promise.all([worker(),worker()]).then(function(){if(!success)throw new Error('Не удалось загрузить сезоны.');var data=WePlaySeasons.combine(results);seasonCache[key]={at:Date.now(),data:data};var keys=Object.keys(seasonCache).sort(function(a,b){return seasonCache[a].at-seasonCache[b].at;});while(keys.length>32)delete seasonCache[keys.shift()];return data;}).finally(function(){delete seasonPending[key];});return seasonPending[key];
   }
   function player(item,preferred,season,resume){
-    var choices=playbackChoices(item,preferred),last;
+    var choices=playbackChoices(item,preferred),last,attempted={};
     if(!preferred&&resume&&resume.sourceId)choices=choices.filter(function(v){return String(v.id)===resume.sourceId;}).concat(choices.filter(function(v){return String(v.id)!==resume.sourceId;}));
-    function next(i){if(i>=choices.length)return Promise.reject(last||new Error('Вариант просмотра недоступен.'));return rawDetail(choices[i]).then(playerData).then(function(resolved){var episodes=WePlayNativePlayer.parse(resolved.payload);if(resume&&WePlaySeasons.resumeIndex(episodes,resume)<0)throw new Error('Сохранённая серия недоступна в этом источнике.');if(season!==undefined&&season!==null&&WePlaySeasons.startIndex(episodes,season)<0)throw new Error('Выбранный сезон недоступен в этом источнике.');resolved.source=choices[i]._source||'primary';resolved.versionId=String(choices[i].id);return resolved;}).catch(function(e){last=e;return next(i+1);});}
+    function next(i){if(i>=choices.length)return Promise.reject(last||new Error('Вариант просмотра недоступен.'));attempted[String(choices[i].id)]=true;return rawDetail(choices[i]).then(playerData).then(function(resolved){var episodes=WePlayNativePlayer.parse(resolved.payload);if(resume&&WePlaySeasons.resumeIndex(episodes,resume)<0)throw new Error('Сохранённая серия недоступна в этом источнике.');if(season!==undefined&&season!==null&&WePlaySeasons.startIndex(episodes,season)<0)throw new Error('Выбранный сезон недоступен в этом источнике.');resolved=Object.assign({},resolved,{source:choices[i]._source||'primary',versionId:String(choices[i].id)});return choices.length>1?combinedPlayback(choices,resolved,attempted):resolved;}).catch(function(e){last=e;return next(i+1);});}
     return next(0);
   }
+  function combinedPlayback(choices,initial,attempted){
+    var original=WePlaySeasons.ordered(WePlayNativePlayer.parse(initial.payload)),episodes=[],byEpisode={},listeners=[],pendingTask;
+    var serial=original.some(function(e){return e.season!==undefined&&e.season!==null;}),loaded={};
+    function episodeKey(e){
+      if(!serial)return e.season===undefined||e.season===null?'movie':'';
+      var season=Number(e.season),number=Number(e.episode);
+      return e.season!==null&&e.season!==undefined&&isFinite(season)&&season>=0&&season===Math.floor(season)&&number>0&&number===Math.floor(number)?season+':'+number:'';
+    }
+    original.forEach(function(e){var copy=Object.assign({},e,{variants:[]}),key=episodeKey(e);episodes.push(copy);if(key)byEpisode[key]=copy;});
+    function add(resolved,record){
+      var list=WePlayNativePlayer.parse(resolved.payload),number=choices.findIndex(function(c){return String(c.id)===String(record.id);})+1,added=false;
+      if(!serial&&list.length!==1)return false;
+      list.forEach(function(e){
+        var target=byEpisode[episodeKey(e)];if(!target)return;
+        var audio=e.audio||{},order=audio.order||[],tracks=resolved.resolveEpisode?(e.variants||[]).map(function(v,i){return{label:v.label,index:i,id:v.vkId};}):(audio.names&&audio.names.length?audio.names:['Основная']).map(function(label,i){return{label:label,index:i};}).sort(function(a,b){return(order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);});
+        if(!resolved.resolveEpisode&&!tracks.some(function(t){return typeof t.label==='string'&&t.label.trim()&&t.label.trim().toLowerCase()!=='delete';}))tracks=[{label:'Основная',index:0}];
+        tracks.forEach(function(track){
+          var label=typeof track.label==='string'?track.label.replace(/\s+/g,' ').trim():'';if(!label||label.toLowerCase()==='delete')return;
+          var key=track.id?'vk:'+track.id:'hls:'+e.hls+':'+track.index;
+          var previous=target.variants.filter(function(v){return v.key===key;})[0],caption='Источник '+number;
+          if(previous){if(previous.sources.indexOf(caption)<0){previous.sources.push(caption);previous.caption=previous.sources.join(' · ');}return;}
+          target.variants.push({key:key,label:label,caption:caption,sources:[caption],preferenceKey:String(record.id)+':'+label.toLowerCase()+':'+track.index,_source:{resolved:resolved,episode:e,track:track.index,record:record}});added=true;
+        });
+      });return added;
+    }
+    var first=choices.filter(function(c){return String(c.id)===initial.versionId;})[0];add(initial,first);loaded[initial.versionId]=true;
+    function notify(){listeners.forEach(function(callback){callback();});}
+    var result={payload:{episodes:episodes},source:initial.source,versionId:initial.versionId,
+      resolveEpisode:function(e,index){
+        var variant=e.variants[index];if(!variant)return Promise.reject(new Error('Озвучка недоступна для этой серии.'));
+        var row=variant._source,play=row.resolved;
+        return Promise.resolve(play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:variant.label,audioNames:row.episode.audio&&row.episode.audio.names||[]}).then(function(stream){
+          var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);
+          return Object.assign({},typeof stream==='string'?{url:stream}:stream,{transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
+        });
+      },
+      loadSources:function(onUpdate){
+        if(onUpdate)listeners.push(onUpdate);
+        if(pendingTask)return pendingTask;
+        var remaining=choices.filter(function(c){return !loaded[String(c.id)]&&!attempted[String(c.id)];}),at=0;
+        function worker(){var record=remaining[at++];if(!record)return Promise.resolve();return rawDetail(record).then(playerData).then(function(resolved){if(add(resolved,record))notify();}).catch(function(){}).then(worker);}
+        pendingTask=Promise.all([worker(),worker()]).then(function(){notify();return result;});return pendingTask;
+      }
+    };return result;
+  }
   function voices(item,resume){
-    return player(item,null,null,resume).then(function(resolved){
+    return player(item,null,null,resume).then(function(resolved){return resolved.loadSources?resolved.loadSources():resolved;}).then(function(resolved){
       var episodes=WePlaySeasons.ordered(WePlayNativePlayer.parse(resolved.payload)),at=resume?WePlaySeasons.resumeIndex(episodes,resume):0;
       if(at<0)return{labels:[]};
       var episode=episodes[at],audio=episode.audio||{},order=resolved.resolveEpisode?[]:audio.order||[],names=resolved.resolveEpisode?(episode.variants||[]).map(function(variant){return variant.label;}):audio.names||[],seen=Object.create(null);
