@@ -11,16 +11,27 @@
   }
 
   function image(path,size){return /^\/[a-zA-Z0-9]+\.(?:jpg|png|webp)$/.test(path||'')?'https://image.tmdb.org/t/p/'+size+path:'';}
-  function titleLogos(images){
-    function language(logo){return logo.iso_639_1==='ru'?0:logo.iso_639_1==='en'?1:2;}
-    return (images||[]).filter(function(logo){
-      return /^\/[a-zA-Z0-9]+\.(?:png|svg)$/.test(logo.file_path||'')&&logo.width>=200&&logo.height>=40;
-    }).sort(function(a,b){
-      return language(a)-language(b)||Number(b.vote_count)-Number(a.vote_count)||Number(b.vote_average)-Number(a.vote_average)||b.width-a.width;
-    }).slice(0,3).map(function(logo){
-      return 'https://image.tmdb.org/t/p/'+(/\.svg$/.test(logo.file_path)?'original':'w500')+logo.file_path;
+  function logoLanguage(value){return String(value||'').toLowerCase().replace('_','-').split('-')[0]||null;}
+  function logoPriority(language){language=logoLanguage(language);return language==='ru'?0:!language?1:language==='en'?2:3;}
+  function rankTitleLogos(values){
+    var byURL=Object.create(null),ordered=[];
+    (values||[]).forEach(function(value){
+      var url=typeof value==='string'?value:value&&value.url,language=logoLanguage(value&&typeof value==='object'&&value.language);
+      if(typeof url!=='string'||!/^https?:\/\//.test(url))return;
+      if(byURL[url]){if(language&&(!byURL[url].language||logoPriority(language)<logoPriority(byURL[url].language)))byURL[url].language=language;return;}
+      var record={url:url,language:language,order:ordered.length};byURL[url]=record;ordered.push(record);
     });
+    return ordered.sort(function(a,b){return logoPriority(a.language)-logoPriority(b.language)||a.order-b.order;}).map(function(record){return{url:record.url,language:record.language};});
   }
+  function titleLogoCandidates(images){
+    var sorted=(images||[]).filter(function(logo){
+      return /^\/[a-zA-Z0-9]+\.(?:png|svg)$/.test(logo.file_path||'')&&logo.width>=120&&logo.height>=32&&logo.width/logo.height>=.55;
+    }).slice().sort(function(a,b){
+      return logoPriority(a.iso_639_1)-logoPriority(b.iso_639_1)||(Number(b.vote_count)||0)-(Number(a.vote_count)||0)||(Number(b.vote_average)||0)-(Number(a.vote_average)||0)||b.width-a.width;
+    }),counts=Object.create(null);
+    return sorted.filter(function(logo){var group=logoLanguage(logo.iso_639_1)||'neutral';counts[group]=(counts[group]||0)+1;return counts[group]<=3;}).map(function(logo){return{url:'https://image.tmdb.org/t/p/'+(/\.svg$/.test(logo.file_path)?'original':'w500')+logo.file_path,language:logoLanguage(logo.iso_639_1)};});
+  }
+  function titleLogos(images){return titleLogoCandidates(images).slice(0,3).map(function(logo){return logo.url;});}
   function normal(value){return WePlayCatalogUnion.normal(WePlayWebCatalog.cleanTitle(value||''));}
   function collectionBackdrop(item){
     var index=window.WEPLAY_COLLECTIONS,kind=WePlayCatalogUnion.kind(item);
@@ -121,7 +132,7 @@
       var backgrounds=(data.images&&data.images.backdrops||[]).filter(function(img){return img.width>=1280&&img.width/img.height>=1.45&&img.width/img.height<=2.6&&image(img.file_path,'original');}).sort(function(a,b){return Number(a.iso_639_1!==null)-Number(b.iso_639_1!==null)||Math.abs(a.aspect_ratio-16/9)-Math.abs(b.aspect_ratio-16/9)||Number(b.vote_count)-Number(a.vote_count)||Number(b.vote_average)-Number(a.vote_average)||b.width-a.width;}).slice(0,4).map(function(img){return image(img.file_path,'original');});
       var defaultBackground=image(data.backdrop_path,'original');if(defaultBackground&&backgrounds.indexOf(defaultBackground)<0)backgrounds.push(defaultBackground);
       var page='https://www.themoviedb.org/'+type+'/'+data.id,cast=(data.credits&&data.credits.cast||[]).slice(0,12).map(function(person){return{id:String(person.id),name:person.name||person.original_name||'',image:image(person.profile_path,'h632'),source:'TMDB',sourceURL:page};}).filter(function(person){return !!person.name;});
-      return{tmdbAPI:true,tmdbId:String(data.id),imdbId:imdb,lookupTitle:data.original_title||data.original_name||data.title||data.name,poster:image(data.poster_path,'original'),posterThumb:image(data.poster_path,'w342'),background:backgrounds[0]||'',backgrounds:backgrounds,backgroundThumb:backgrounds[0]?backgrounds[0].replace('/original/','/w1280/'):'',backgroundSource:'TMDB',backgroundCredit:page,source:'TMDB',titleLogos:titleLogos(data.images&&data.images.logos),cast:cast,castPage:page,series:type==='tv'?{seasons:data.number_of_seasons||null,status:WePlaySeries.status(data.status),at:Date.now()}:null};
+      return{tmdbAPI:true,tmdbId:String(data.id),imdbId:imdb,lookupTitle:data.original_title||data.original_name||data.title||data.name,poster:image(data.poster_path,'original'),posterThumb:image(data.poster_path,'w342'),background:backgrounds[0]||'',backgrounds:backgrounds,backgroundThumb:backgrounds[0]?backgrounds[0].replace('/original/','/w1280/'):'',backgroundSource:'TMDB',backgroundCredit:page,source:'TMDB',titleLogos:titleLogos(data.images&&data.images.logos),titleLogoCandidates:titleLogoCandidates(data.images&&data.images.logos),cast:cast,castPage:page,series:type==='tv'?{seasons:data.number_of_seasons||null,status:WePlaySeries.status(data.status),at:Date.now()}:null};
     }).finally(function(){delete pending[key];});return pending[key];
   }
   function nextPart(item,options){
@@ -134,5 +145,5 @@
       });
     });
   }
-  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,indexedPreviews:indexedPreviews,collectionBackdrop:collectionBackdrop,nextPart:nextPart,titleLogos:titleLogos};
+  window.WePlayTMDB={available:available,artwork:artwork,indexed:indexed,indexedPreviews:indexedPreviews,collectionBackdrop:collectionBackdrop,nextPart:nextPart,titleLogos:titleLogos,titleLogoCandidates:titleLogoCandidates,rankTitleLogos:rankTitleLogos,logoPriority:logoPriority};
 }());

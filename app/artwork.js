@@ -221,6 +221,7 @@
     var cached=saved(item),initial=cached&&cached.data||window.WePlayTMDB&&WePlayTMDB.indexed(item);
     entry.updateMetadata=function(data){
       entry.metadata=data||null;mergeImages(entry,normalizedImages(entry.item,data));
+      if(entry.titleLogoChoice)upgradeTitle(entry).catch(function(){});
       entry.actors=(data&&data.cast||[]).map(function(person){return personRecord(person,data.castSource||data.source);});
       return entry;
     };
@@ -396,60 +397,72 @@
     assets[role]=task;return task;
   }
   function asset(item,role,priority){return resourceAsset(resourceFor(item,priority),role);}
+  function titleCandidates(entry){
+    function logos(data){return data?(data.titleLogoCandidates||[]).concat(data.titleLogos||[]):[];}
+    var domestic=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(entry.item)).map(function(record){return{url:record.titleLogo,language:'ru'};}):[],packaged=WePlayTMDB.indexed(entry.item);
+    return WePlayTMDB.rankTitleLogos(domestic.concat(logos(packaged),logos(entry.metadata)));
+  }
+  function selectTitle(candidates){
+    return candidates.reduce(function(previous,candidate){return previous.then(function(value){
+      if(value)return value;
+      return loadImage(candidate.url,1,1800).then(function(image){return image.width>=120&&image.height>=32&&image.width/image.height>=.55?{url:candidate.url,language:candidate.language,image:image.image}:null;},function(){return null;});
+    });},Promise.resolve(null));
+  }
+  function publishTitle(entry,choice){
+    if(!choice)return entry.titleLogo||null;
+    if(entry.titleLogoChoice&&WePlayTMDB.logoPriority(choice.language)>=WePlayTMDB.logoPriority(entry.titleLogoChoice.language))return entry.titleLogo;
+    entry.titleLogoChoice=choice;entry.titleLogo=choice.image;
+    if(entry.titleLogoBindings)entry.titleLogoBindings.forEach(function(show){show(entry.titleLogo);});
+    return entry.titleLogo;
+  }
+  function upgradeTitle(entry,skip){
+    if(!entry.titleLogoChoice||WePlayTMDB.logoPriority(entry.titleLogoChoice.language)===0)return Promise.resolve(entry.titleLogo);
+    if(entry.titleLogoUpgrade)return entry.titleLogoUpgrade;
+    var russian=titleCandidates(entry).filter(function(candidate){return candidate.language==='ru'&&(!skip||skip.indexOf(candidate.url)<0);});
+    if(!russian.length)return Promise.resolve(entry.titleLogo);
+    entry.titleLogoUpgrade=selectTitle(russian).then(function(choice){return publishTitle(entry,choice);}).finally(function(){entry.titleLogoUpgrade=null;});return entry.titleLogoUpgrade;
+  }
+  function titleTask(entry){
+    if(entry.titleLogoTask)return entry.titleLogoTask;
+    var initial=titleCandidates(entry),attempted=initial.map(function(candidate){return candidate.url;});
+    entry.titleLogoTask=selectTitle(initial).then(function(choice){
+      if(choice){publishTitle(entry,choice);entry.metadataTask.then(function(){return upgradeTitle(entry,attempted);}).catch(function(){});return entry.titleLogo;}
+      return entry.metadataTask.then(function(){var candidates=titleCandidates(entry).filter(function(candidate){return attempted.indexOf(candidate.url)<0;}),imdb=entry.identity.ids.imdb||entry.metadata&&entry.metadata.imdbId;if(/^tt\d+$/.test(imdb||''))candidates.push({url:'https://images.metahub.space/logo/medium/'+imdb+'/img',language:null});return selectTitle(WePlayTMDB.rankTitleLogos(candidates));}).then(function(found){return publishTitle(entry,found);});
+    }).then(function(original){if(!original)entry.titleLogoTask=null;return original;},function(){entry.titleLogoTask=null;return null;});return entry.titleLogoTask;
+  }
+  function bindTitle(entry,heading,show){
+    if(heading._weplayTitleCleanup)heading._weplayTitleCleanup();
+    var alive=true;
+    function cleanup(){if(!alive)return;alive=false;entry.titleLogoBindings.delete(listener);if(heading._weplayTitleCleanup===cleanup){delete heading._weplayTitleCleanup;delete heading._weplayTitleCandidate;heading.removeAttribute('data-weplay-title');}}
+    function listener(original){if(!alive)return;if(!heading.isConnected){cleanup();return;}show(original);}
+    if(!entry.titleLogoBindings)entry.titleLogoBindings=new Set();entry.titleLogoBindings.add(listener);heading._weplayTitleCleanup=cleanup;heading.setAttribute('data-weplay-title','true');
+    return{show:listener,cleanup:cleanup};
+  }
   function attachTitle(heading,item){
     if(!heading.isConnected)return;
-    var entry=resourceFor(item,true),label=heading.textContent;
-    function select(urls){
-      return uniqueImages(urls).reduce(function(previous,url){
-        return previous.then(function(value){
-          if(value)return value;
-          return loadImage(url,1,1800).then(function(image){
-            return image.width>=120&&image.height>=32&&image.width/image.height>=.55?image:null;
-          },function(){return null;});
-        });
-      },Promise.resolve(null));
-    }
-    function logos(data){return data&&data.titleLogos||[];}
-    if(!entry.titleLogoTask){
-      var domestic=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(item)).map(function(record){return record.titleLogo;}):[];
-      var packaged=window.WePlayTMDB&&WePlayTMDB.indexed(item),immediate=domestic.concat(logos(packaged),logos(entry.metadata));
-      entry.titleLogoTask=select(immediate).then(function(value){
-        return value||entry.metadataTask.then(function(){
-          var pendingLogos=logos(entry.metadata).filter(function(url){return immediate.indexOf(url)<0;}),imdb=entry.identity.ids.imdb||entry.metadata&&entry.metadata.imdbId;
-          if(/^tt\d+$/.test(imdb||''))pendingLogos.push('https://images.metahub.space/logo/medium/'+imdb+'/img');
-          return select(pendingLogos);
-        });
-      }).then(function(value){
-        if(!value)entry.titleLogoTask=null;
-        entry.titleLogo=value&&value.image;
-        if(entry.titleLogoBindings)entry.titleLogoBindings.forEach(function(show){show(entry.titleLogo);});
-        return entry.titleLogo;
-      },function(){entry.titleLogoTask=null;return null;});
-    }
-    entry.titleLogoTask.then(function(original){
-      if(!original||!heading.isConnected||heading.closest('.slide-leaving'))return;
+    var entry=resourceFor(item,true),label=heading.textContent||item.title,binding=bindTitle(entry,heading,function(original){
+      if(!original||heading.closest('.slide-leaving')||heading._weplayTitleCandidate===original)return;
+      heading._weplayTitleCandidate=original;
       var image=original.cloneNode();image.alt=label;image.className='media-title-logo';image.draggable=false;
-      function show(){
-        if(!heading.isConnected||heading.closest('.slide-leaving'))return;
-        heading.textContent='';heading.appendChild(image);heading.classList.add('has-title-logo');
-      }
+      function show(){if(!heading.isConnected||heading._weplayTitleCleanup!==binding.cleanup||heading._weplayTitleCandidate!==original||heading.closest('.slide-leaving'))return;heading.textContent='';heading.appendChild(image);heading.classList.add('has-title-logo');}
+      image.onerror=function(){if(heading._weplayTitleCandidate===original)delete heading._weplayTitleCandidate;};
       if(image.complete&&image.naturalWidth)show();else image.onload=show;
     });
+    if(entry.titleLogo)binding.show(entry.titleLogo);
+    titleTask(entry).then(function(original){binding.show(entry.titleLogo||original);});
   }
   function attachPlayerTitle(heading,item){
-    var entry=resources.filter(function(record){return sameResource(record,item);})[0],label=heading.textContent,alive=true;
+    var entry=resources.filter(function(record){return sameResource(record,item);})[0],label=heading.textContent;
     if(!entry)return function(){};
-    function show(original){
-      if(!alive||!original||!original.complete||!original.naturalWidth||!heading.isConnected||heading.firstElementChild===original)return;
-      // Reuse the decoded image itself: inserting a clone could revalidate its URL
-      // while background artwork requests are paused for playback.
+    var binding=bindTitle(entry,heading,function(original){
+      if(!original||!original.complete||!original.naturalWidth||heading.firstElementChild===original)return;
+      // Keep the decoded image: changing its parent never revalidates the URL.
       original.alt='';original.className='media-title-logo';original.draggable=false;
       heading.setAttribute('aria-label',label);heading.textContent='';heading.appendChild(original);heading.classList.add('has-title-logo');
-    }
-    if(!entry.titleLogoBindings)entry.titleLogoBindings=new Set();entry.titleLogoBindings.add(show);
-    if(entry.titleLogo)show(entry.titleLogo);
-    else if(entry.titleLogoTask)entry.titleLogoTask.then(show,function(){});
-    return function(){alive=false;entry.titleLogoBindings.delete(show);};
+    });
+    if(entry.titleLogo)binding.show(entry.titleLogo);
+    else if(entry.titleLogoTask)entry.titleLogoTask.then(function(original){binding.show(entry.titleLogo||original);},function(){});
+    return binding.cleanup;
   }
   function resolveResource(item,options){var entry=resourceFor(item,true);if(!options||!options.actors)return entry.ready;return resourceActors(entry).then(function(){return entry;});}
   function resourceActors(entry){
@@ -634,5 +647,5 @@
       abort.addEventListener('abort',cancel);next();
     });},{media:true,signal:signal});
   }
-  window.WePlayArtwork={attachPlayerTitle:attachPlayerTitle,attachPlayer:attachPlayer,get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;img._weplayCandidate=null;stopArtworkRetry(img);if(img._weplayEntry)img._weplayEntry.bindings.delete(img);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},attachTitle:attachTitle,apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
+  window.WePlayArtwork={attachPlayerTitle:attachPlayerTitle,attachPlayer:attachPlayer,get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){if(root._weplayTitleCleanup)root._weplayTitleCleanup();root.querySelectorAll('[data-weplay-title]').forEach(function(heading){if(heading._weplayTitleCleanup)heading._weplayTitleCleanup();});root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;img._weplayCandidate=null;stopArtworkRetry(img);if(img._weplayEntry)img._weplayEntry.bindings.delete(img);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},attachTitle:attachTitle,apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
 }());

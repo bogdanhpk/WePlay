@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const c={window:{}};vm.runInNewContext(fs.readFileSync(path.resolve(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'../app'),'tmdb.js'),'utf8'),c);const tmdb=c.window.WePlayTMDB,plain=x=>JSON.parse(JSON.stringify(x));
+const input=[{file_path:'/English.png',iso_639_1:'en',width:2400,height:600,vote_count:500,vote_average:10},{file_path:'/Russian.png',iso_639_1:'ru',width:150,height:40,vote_count:0,vote_average:0},{file_path:'/Neutral.svg',iso_639_1:null,width:600,height:200}];const before=JSON.stringify(input),logos=tmdb.titleLogoCandidates(input);
+assert.equal(logos[0].language,'ru');assert.ok(logos[0].url.endsWith('/Russian.png'));assert.equal(JSON.stringify(input),before);assert.ok(tmdb.titleLogos(input)[0].endsWith('/Russian.png'));
+assert.deepEqual(plain(tmdb.rankTitleLogos([{url:'https://fixture.invalid/en.png',language:'en'},{url:'https://fixture.invalid/ru.png',language:'RU-ru'}])).map(l=>l.language),['ru','en']);
+const merged=tmdb.rankTitleLogos(['https://fixture.invalid/ru.png',{url:'https://fixture.invalid/ru.png',language:'ru'},{url:'https://fixture.invalid/en.png',language:'en'},'https://fixture.invalid/en.png']);assert.equal(merged.length,2);assert.equal(merged[0].language,'ru');assert.equal(merged[1].language,'en');
+assert.equal(tmdb.titleLogoCandidates([{file_path:'/Bad.png',iso_639_1:'ru',width:100,height:20},input[0]])[0].language,'en');assert.equal(tmdb.titleLogoCandidates([{file_path:'javascript:alert(1)',iso_639_1:'ru',width:600,height:200}]).length,0);
+assert.ok(tmdb.titleLogoCandidates(input).some(x=>x.url.includes('/original/Neutral.svg')));assert.deepEqual(plain(tmdb.rankTitleLogos([null,{},'javascript:alert(1)'])),[]);
+console.log(JSON.stringify({result:'PASS',checks:['Russian wins over resolution and popularity','readable small Russian logos remain eligible','language tags survive source merging and URL deduplication','regional Russian tags normalize','invalid Russian logo falls back','input arrays remain unchanged']}));
