@@ -10,7 +10,7 @@ WePlay — приложение для просмотра фильмов, сер
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
 | LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.5](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.5_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
-| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.35](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.35.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.36](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.36.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 
@@ -90,6 +90,7 @@ WePlay — приложение для просмотра фильмов, сер
 История просмотра и избранное хранятся на устройстве и не синхронизируются между телевизорами. Личные API-ключи владельца проекта в публичные установщики не включены.
 
 Об источниках обложек и фотографий актёров: [ресурсы изображений](docs/MEDIA_RESOURCES.md).
+
 
 
 

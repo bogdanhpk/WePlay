@@ -2,6 +2,7 @@ package app.weplay.tv;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -66,7 +67,17 @@ public final class MainActivity extends Activity {
         WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         NetworkTransport network = new NetworkTransport(settings.getUserAgentString());
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            private Bitmap blankVideoPoster;
+            @Override public Bitmap getDefaultVideoPoster() {
+                // WebView otherwise stretches its built-in play icon until the first frame.
+                if (blankVideoPoster == null) {
+                    blankVideoPoster = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+                    blankVideoPoster.eraseColor(Color.BLACK);
+                }
+                return blankVideoPoster;
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
