@@ -35,7 +35,7 @@
   var active=false,api=null,video=null,hls=null,serverOffset=0,episodes=[],episodeIndex=0,audioIndex=0,options=null,menu=null,buttons=[],menuIndex=0,bar=null,timer=null,request=0,prepareTimer=null;
   var currentTime=0,totalTime=0,audioPreference='',timeline=null;
   var controlsFocused=false,barSelection='native-toggle',menuBack=null,suspended=false,wantsPlay=true,failed=false,loading=true;
-  var elapsed=null,remaining=null,nowTitle=null,nowEpisode=null,stateLabel=null,toggleButton=null,audioButton=null,episodeButton=null,retryButton=null;
+  var elapsed=null,remaining=null,nowTitle=null,titleLogoCleanup=null,nowEpisode=null,stateLabel=null,toggleButton=null,audioButton=null,episodeButton=null,retryButton=null;
   var seekBar=null,seekKnob=null,seekBubble=null,seekTime=null,seekFrames=null,bufferFill=null,finishLabel=null,settingsButton=null,previousButton=null,nextButton=null,qualityBadge=null;
   var preview=null,seekRun=0,lastSeekKeyAt=0,menuClose=null,menuShade=null,qualityPreference=0,selectedQuality=0,bufferTimer=null,pointerCleanup=null;
   var runningEpisode=null,started=false,runningEnded=false,resumeTarget=0,lastSavedAt=0;
@@ -139,6 +139,7 @@
   function stopEngine(){
     saveProgress(true);runningEpisode=null;started=false;
     if(postplay){postplay.destroy();postplay=null;}
+    if(titleLogoCleanup){titleLogoCleanup();titleLogoCleanup=null;}
     if(seekFrames){seekFrames.destroy();seekFrames=null;}
     document.body.classList.remove('avplay-active');
     clearTimeout(prepareTimer);clearTimeout(bufferTimer);clearTimeout(stallTimer);clearTimeout(recoveryTimer);recoveryTimer=null;preview=null;remoteSeekKey=0;if(pointerCleanup)pointerCleanup();
@@ -214,7 +215,7 @@
   function controlButtons(){return bar?Array.prototype.slice.call(bar.querySelectorAll('.native-actions button')).filter(function(b){return !b.disabled&&!b.hidden&&b.offsetWidth&&b.offsetHeight;}):[];}
   function updateControls(){
     if(!bar||!episodes.length)return;var e=episodes[episodeIndex],tracks=audioOptions(),track=tracks.filter(function(t){return t.index===audioSelection();})[0];
-    nowTitle.textContent=options.title||document.getElementById('player-title').textContent||'Просмотр';nowEpisode.textContent=e.season?'Сезон '+e.season+' · Серия '+e.episode:'';nowEpisode.hidden=!e.season;
+    if(!nowTitle.classList.contains('has-title-logo'))put(nowTitle,options.title||document.getElementById('player-title').textContent||'Просмотр');nowEpisode.textContent=e.season?'Сезон '+e.season+' · Серия '+e.episode:'';nowEpisode.hidden=!e.season;
     put(stateLabel,failed?'Видео недоступно':preview?'Перемотка':runningEnded?'Завершено':suspended||!wantsPlay?'Пауза':'');stateLabel.hidden=!stateLabel.textContent;
     document.getElementById('player').classList.toggle('native-loading',loading&&!failed&&!suspended&&!preview);
     toggleButton.querySelector('.control-label').textContent=runningEnded?'Сначала':wantsPlay?'Пауза':'Продолжить';toggleButton.querySelector('.icon').innerHTML=playerIcon(wantsPlay?'pause':'play');
@@ -517,7 +518,7 @@
     var tools=el('div','native-tools');episodeButton=null;
     if(episodes.length>1){episodeButton=control('native-episodes','Серии','list-numbers','',chooseEpisode);tools.appendChild(episodeButton);}
     retryButton=control('native-retry','Попробовать ещё',null,undefined,function(){startEpisode(resumeTarget||currentTime,wantsPlay,'native-toggle');});retryButton.hidden=!failed;tools.appendChild(retryButton);
-    settingsButton=control('native-settings','Настройки','gear-six',undefined,showSettings);settingsButton.setAttribute('aria-haspopup','dialog');settingsButton.setAttribute('aria-expanded','false');qualityBadge=el('span','native-settings-badge');qualityBadge.setAttribute('aria-hidden','true');qualityBadge.hidden=true;settingsButton.appendChild(qualityBadge);tools.appendChild(settingsButton);actions.appendChild(tools);bottom.appendChild(actions);bar.appendChild(bottom);document.getElementById('player').appendChild(bar);updateControls();tick(currentTime);
+    settingsButton=control('native-settings','Настройки','gear-six',undefined,showSettings);settingsButton.setAttribute('aria-haspopup','dialog');settingsButton.setAttribute('aria-expanded','false');qualityBadge=el('span','native-settings-badge');qualityBadge.setAttribute('aria-hidden','true');qualityBadge.hidden=true;settingsButton.appendChild(qualityBadge);tools.appendChild(settingsButton);actions.appendChild(tools);bottom.appendChild(actions);bar.appendChild(bottom);document.getElementById('player').appendChild(bar);updateControls();if(options.mediaItem&&window.WePlayArtwork)titleLogoCleanup=WePlayArtwork.attachPlayerTitle(nowTitle,options.mediaItem);tick(currentTime);
   }
   var pointerAt=0,playerRoot=document.getElementById('player');
   playerRoot.addEventListener('mousemove',function(){if(active&&!menu&&!suspended&&!preview&&Date.now()-pointerAt>250){pointerAt=Date.now();show(false);}});

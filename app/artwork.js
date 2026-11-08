@@ -421,7 +421,9 @@
         });
       }).then(function(value){
         if(!value)entry.titleLogoTask=null;
-        return value&&value.image;
+        entry.titleLogo=value&&value.image;
+        if(entry.titleLogoBindings)entry.titleLogoBindings.forEach(function(show){show(entry.titleLogo);});
+        return entry.titleLogo;
       },function(){entry.titleLogoTask=null;return null;});
     }
     entry.titleLogoTask.then(function(original){
@@ -433,6 +435,21 @@
       }
       if(image.complete&&image.naturalWidth)show();else image.onload=show;
     });
+  }
+  function attachPlayerTitle(heading,item){
+    var entry=resources.filter(function(record){return sameResource(record,item);})[0],label=heading.textContent,alive=true;
+    if(!entry)return function(){};
+    function show(original){
+      if(!alive||!original||!original.complete||!original.naturalWidth||!heading.isConnected||heading.firstElementChild===original)return;
+      // Reuse the decoded image itself: inserting a clone could revalidate its URL
+      // while background artwork requests are paused for playback.
+      original.alt='';original.className='media-title-logo';original.draggable=false;
+      heading.setAttribute('aria-label',label);heading.textContent='';heading.appendChild(original);heading.classList.add('has-title-logo');
+    }
+    if(!entry.titleLogoBindings)entry.titleLogoBindings=new Set();entry.titleLogoBindings.add(show);
+    if(entry.titleLogo)show(entry.titleLogo);
+    else if(entry.titleLogoTask)entry.titleLogoTask.then(show,function(){});
+    return function(){alive=false;entry.titleLogoBindings.delete(show);};
   }
   function resolveResource(item,options){var entry=resourceFor(item,true);if(!options||!options.actors)return entry.ready;return resourceActors(entry).then(function(){return entry;});}
   function resourceActors(entry){
@@ -617,5 +634,5 @@
       abort.addEventListener('abort',cancel);next();
     });},{media:true,signal:signal});
   }
-  window.WePlayArtwork={attachPlayer:attachPlayer,get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;img._weplayCandidate=null;stopArtworkRetry(img);if(img._weplayEntry)img._weplayEntry.bindings.delete(img);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},attachTitle:attachTitle,apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
+  window.WePlayArtwork={attachPlayerTitle:attachPlayerTitle,attachPlayer:attachPlayer,get:get,resolve:resolveResource,cached:cachedResource,cast:function(item){return resourceActors(resourceFor(item,true));},series:series,cachedSeries:cachedSeries,cachedCast:function(item){var entry=cachedResource(item);return entry?entry.actors:[];},profile:profile,release:function(root){root.querySelectorAll('img').forEach(function(img){img._weplayRetired=true;img._weplayCandidate=null;stopArtworkRetry(img);if(img._weplayEntry)img._weplayEntry.bindings.delete(img);if(observer)observer.unobserve(img);});},attach:function(img,item,role){bind(img,item,role,false,true);},attachTitle:attachTitle,apply:function(img,item,wide,full){bind(img,item,wide,full,true);},observe:function(img,item,wide,full){bind(img,item,wide,full,false);},prepare:prepare,prefetch:prefetch};
 }());
