@@ -335,7 +335,11 @@
       qualityPreference=selectedQuality=height;
       try{localStorage.setItem('lord.quality.v1',String(qualityPreference));}catch(ignore){}
       if(restart)startEpisode(resumeTarget||currentTime,wantsPlay,'native-settings');
-      else{hls.nextLevel=level?level.index:-1;showSettings('quality');}
+      else{
+        // A manual choice replaces buffered video now; Auto keeps playback uninterrupted.
+        if(level)hls.currentLevel=level.index;else hls.nextLevel=-1;
+        showSettings('quality');
+      }
       report('qualitySelected',qualityPreference||'auto');
     },function(){showSettings('quality');},{kind:'quality'});
   }
