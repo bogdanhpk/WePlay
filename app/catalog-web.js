@@ -63,10 +63,35 @@
   function listing(doc,s,params,h){
     var links=h.list(doc,Number(params.category)===219&&!params.search?'#owl-top .media-tile__link[href]':'.media-tile__link[href]'),seen={},items=[],cursor=0,failed=false;
     links.forEach(function(link){var href=h.pageURL(link.getAttribute('href'),s),id=href&&new URL(href).pathname.match(/^\/(\d+)\/?$/);if(!id||seen[id[1]])return;seen[id[1]]=true;items.push({id:s.id+'-'+id[1],_url:href,_source:s.id,_kind:Number(params.category)===13||Number(params.category)===36?'series':Number(params.category)===106||Number(params.category)===109?'movie':'',xfields:{}});});
-    if(!items.length){if(/ничего не найдено|поиск по сайту не дал|не найдено/i.test(h.text(doc.body)))return Promise.resolve([]);return Promise.reject(new Error('Не удалось прочитать раздел сайта.'));}
+    var additional=params.search&&s.searchPublisher&&doc.querySelector('#alloha-public-search .aps-form')?expanded(doc,s,params.search,h).then(function(rows){return{items:rows};},function(error){return{error:error};}):null;
+    if(!items.length){if(additional)return additional.then(function(extra){if(extra.error)throw extra.error;return extra.items;});if(/ничего не найдено|поиск по сайту не дал|не найдено/i.test(h.text(doc.body)))return Promise.resolve([]);return Promise.reject(new Error('Не удалось прочитать раздел сайта.'));}
     var result=new Array(items.length),failures=0;
     function worker(){if(!h.current())return Promise.reject(new Error('Источник изменён.'));if(failed||cursor>=items.length)return Promise.resolve();var at=cursor++,item=items[at],cached=h.lookup(item.id);return (cached&&cached._detail?Promise.resolve(cached):detail(item,s,h)).then(function(full){result[at]=full;return worker();},function(error){if(h.search){failures++;return worker();}failed=true;throw error;});}
-    return Promise.all([worker(),worker(),worker()]).then(function(){if(!h.search)return result;var available=result.filter(Boolean);if(!available.length&&failures)throw new Error('Не удалось загрузить результаты из источника.');available._partial=failures>0;return available;});
+    return Promise.all([worker(),worker(),worker()]).then(function(){
+      var available=h.search?result.filter(Boolean):result;
+      return Promise.resolve(additional).then(function(extra){
+        if(extra&&extra.items)available=available.concat(extra.items);
+        if(h.search&&!available.length&&failures)throw new Error('Не удалось загрузить результаты из источника.');
+        available._partial=failures>0||!!(extra&&extra.error);return available;
+      });
+    });
+  }
+  function expanded(doc,s,query,h){
+    var form=doc.querySelector('#alloha-public-search .aps-form'),endpoint=form&&h.url(form.getAttribute('data-endpoint'),s.base),csrf=form&&form.getAttribute('data-csrf')||'',target;
+    try{target=new URL(endpoint);}catch(ignore){}
+    if(!target||target.protocol!=='https:'||!/^lordfilm26-kino\d+\.lat$/.test(target.hostname)||target.username||target.password||target.port||target.pathname!=='/engine/ajax/controller.php'||target.search!=='?mod=media_catalog'||!/^[a-f0-9]{32,128}$/i.test(csrf))return Promise.reject(new Error('Расширенный каталог недоступен.'));
+    return h.catalogSearch(endpoint,String(query).slice(0,160),csrf).then(function(records){
+      if(!h.current())throw new Error('Источник изменён.');
+      var seen={},items=[];
+      records.slice(0,40).forEach(function(record){
+        var id=String(record.id_kp||''),name=title(record.name),year=String(record.year||'');
+        if(!/^[1-9]\d{0,11}$/.test(id)||!name||name.length>180||! /^(?:19|20)\d{2}$/.test(year)||seen[id])return;
+        seen[id]=true;
+        var item={id:s.id+'-kp-'+id,title:name,_source:s.id,_expanded:true,_detail:true,_video:{publisher:s.searchPublisher,titleId:id,aggregator:'kp'},xfields:{year:year,original_title:title(record.original_name),kinopoisk_id:id,image:h.url(record.poster,s.base),janre:String(record.type||''),film:'https://plapi.cdnvideohub.com/api/v1/player/sv/playlist'}};
+        h.remember(item);items.push(item);
+      });
+      return items;
+    });
   }
   window.WePlayWebCatalog={present:present,detail:detail,listing:listing,cleanTitle:title,originalTitle:originalTitle,breadcrumbKind:breadcrumbKind};
 }());

@@ -2,8 +2,8 @@ window.WEPLAY_UPDATE_CONFIG = {
   "schema": 1,
   "app": "app.weplay.tv",
   "shell": 1,
-  "bundledVersion": "1.0.4",
-  "bundledSequence": 100000004,
+  "bundledVersion": "1.0.5",
+  "bundledSequence": 100000005,
   "channel": "stable",
   "manifestURL": "https://raw.githubusercontent.com/bogdanhpk/WePlay/main/updates/webos/stable.json",
   "publicKey": {

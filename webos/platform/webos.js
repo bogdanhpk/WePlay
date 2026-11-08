@@ -77,6 +77,13 @@
   };
 
   window.WePlayWebOS = {
+    catalogSearch: function (url, fields, options) {
+      if (!packaged) return browserFetch(url, {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}, body: new URLSearchParams({action: 'search', query: fields.query, csrf: fields.csrf}).toString(), signal: options && options.signal});
+      return connect().then(function (address) {
+        if (!address) throw new Error('Служба сети недоступна.');
+        return browserFetch(transport(url, true) + '&catalogSearch=' + encodeURIComponent(JSON.stringify(fields)), {signal: options && options.signal});
+      });
+    },
     mediaURL: function (url) { return endpoint && isRemote(url) ? transport(url, false) : url; },
     exit: function () {
       if (window.webOS && webOS.platformBack) webOS.platformBack();

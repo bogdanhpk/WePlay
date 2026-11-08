@@ -13,17 +13,32 @@ import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.json.JSONObject;
 
-/** Same-origin GET/HEAD transport. Runs on WebView worker threads, never the UI thread. */
+/** Same-origin transport with a read-only catalog search operation. Runs off the UI thread. */
 final class NetworkTransport {
     private final String userAgent;
     private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER);
     NetworkTransport(String userAgent) { this.userAgent = userAgent; }
+
+    private byte[] catalogSearch(URL url, String raw) throws Exception {
+        if (!url.getHost().matches("lordfilm26-kino[0-9]+\\.lat") ||
+            !url.getPath().equals("/engine/ajax/controller.php") || !"mod=media_catalog".equals(url.getQuery()) || raw.length() > 1024)
+            throw new IOException("Invalid catalog search");
+        JSONObject fields = new JSONObject(raw);
+        String query = fields.getString("query"), csrf = fields.getString("csrf");
+        if (query.trim().isEmpty() || query.length() > 160 || !csrf.matches("[a-fA-F0-9]{32,128}"))
+            throw new IOException("Invalid catalog search");
+        return ("action=search&query=" + URLEncoder.encode(query, "UTF-8") + "&csrf=" + URLEncoder.encode(csrf, "UTF-8"))
+            .getBytes(StandardCharsets.UTF_8);
+    }
 
     private URL publicHttps(String value) throws IOException {
         URL url = new URL(value);
@@ -45,14 +60,17 @@ final class NetworkTransport {
             if (!method.equals("GET") && !method.equals("HEAD")) return failure(405, "Method Not Allowed");
             Uri route = request.getUrl();
             URL url = publicHttps(route.getQueryParameter("url"));
+            String search = route.getQueryParameter("catalogSearch");
+            if (search != null && !method.equals("GET")) return failure(405, "Method Not Allowed");
             boolean credentials = "include".equals(route.getQueryParameter("credentials"));
             URL initial = url;
             for (int hop = 0; hop < 6; hop++) {
+                byte[] searchBody = search == null ? null : catalogSearch(url, search);
                 connection = (HttpURLConnection)url.openConnection();
                 connection.setInstanceFollowRedirects(false);
                 connection.setConnectTimeout(8000);
-                connection.setReadTimeout(20000);
-                connection.setRequestMethod(method);
+                connection.setReadTimeout(searchBody == null ? 20000 : 30000);
+                connection.setRequestMethod(searchBody == null ? method : "POST");
                 connection.setRequestProperty("User-Agent", userAgent);
                 connection.setRequestProperty("Accept-Encoding", "identity");
                 for (Map.Entry<String,String> header : request.getRequestHeaders().entrySet()) {
@@ -66,6 +84,13 @@ final class NetworkTransport {
                 if (credentials) {
                     for (Map.Entry<String,List<String>> header : cookies.get(uri, Collections.emptyMap()).entrySet())
                         connection.setRequestProperty(header.getKey(), String.join("; ", header.getValue()));
+                }
+                if (searchBody != null) {
+                    connection.setDoOutput(true);
+                    connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                    connection.setRequestProperty("Referer", "https://" + url.getHost() + "/");
+                    connection.setFixedLengthStreamingMode(searchBody.length);
+                    try (java.io.OutputStream output = connection.getOutputStream()) { output.write(searchBody); }
                 }
                 int code = connection.getResponseCode();
                 if (credentials) cookies.put(uri, connection.getHeaderFields());

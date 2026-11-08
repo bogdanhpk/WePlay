@@ -39,9 +39,10 @@
   function plan(query,known){
     var q=parse(query),out=[],seen={};function add(value){value=clean(value);var k=value.toLowerCase();if(value&&!seen[k]){seen[k]=true;out.push(value);}}
     add(query);if(q.year)add(q.title);var folded=normal(query);if(folded!==clean(query).toLowerCase())add(folded);var near=rank(known||[],query)[0];if(near){var m=match(near,query);if(m&&m.tier<3)add(clean(near.title));}
-    var converted=layout(query);if(converted&&q.words.join('').length>=4)add(converted);
-    var words=q.words.slice().sort(function(a,b){return b.length-a.length;});if(words.length>1){if(words[0].length>=4)add(words[0]);var other=words.filter(function(w){return w!==words[0]&&w.length>=4;})[0];if(other)add(other);}
+    var converted=layout(query),latin=/[a-z]/i.test(query);if(converted&&latin&&q.words.join('').length>=4)add(converted);
+    var words=q.words.slice().sort(function(a,b){return b.length-a.length;});if(words.length>1){if(words[0].length>=4)add(words[0]);if(converted&&!latin&&q.words.join('').length>=4)add(converted);var other=words.filter(function(w){return w!==words[0]&&w.length>=4;})[0];if(other)add(other);}
     else if(words[0]&&words[0].length>=5)add(words[0].slice(0,Math.max(3,Math.min(5,Math.floor(words[0].length*.55)))));
+    if(converted&&!latin&&q.words.join('').length>=4)add(converted);
     return out;
   }
   function aborted(signal){if(signal&&signal.aborted)throw Object.assign(new Error('Поиск отменён'),{name:'AbortError'});}
@@ -54,7 +55,7 @@
     function update(){aborted(signal);if(options.onUpdate)options.onUpdate(result(true));}
     function request(source,value,page){
       aborted(signal);
-      var scope={signal:signal,deadline:Date.now()+4000};return WePlayCatalog.searchRequest(source,value,page,scope).then(function(j){aborted(signal);used[source]=true;if(j._saved||j.data&&j.data.partial)failed[source]=true;else{networkCount++;delete failed[source];}var d=j.data,items=Array.isArray(d)?d:d.items||d.news||[];var matches=rank(items,query).slice(0,4);if(!matches.length&&items.length){scope.aliases=true;matches=items.slice(0,6);}return WePlayCatalog.searchDetails(matches,scope).then(function(){
+      var scope={signal:signal,deadline:Date.now()+(WePlayCatalog.searchBudget?WePlayCatalog.searchBudget(source):4000)};return WePlayCatalog.searchRequest(source,value,page,scope).then(function(j){aborted(signal);used[source]=true;if(j._saved||j.data&&j.data.partial)failed[source]=true;else{networkCount++;delete failed[source];}var d=j.data,items=Array.isArray(d)?d:d.items||d.news||[];var matches=rank(items,query).slice(0,4);if(!matches.length&&items.length){scope.aliases=true;matches=items.slice(0,6);}return WePlayCatalog.searchDetails(matches,scope).then(function(){
         aborted(signal);pool=pool.concat(items);var own=[];
         // Ranking combines records globally. A source may finish its own query variants
         // only after a match from that source, rather than another catalog's exact hit.

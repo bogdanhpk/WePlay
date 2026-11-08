@@ -22,6 +22,9 @@
     var args=Array.prototype.slice.call(arguments);args[1]=transport(url,'omit');return open.apply(this,args);
   };
   window.WePlayAndroid={
+    catalogSearch:function(url,fields,options){
+      return originalFetch(transport(url,'include')+'&catalogSearch='+encodeURIComponent(JSON.stringify(fields)),{signal:options&&options.signal,credentials:'omit'});
+    },
     mediaURL:function(url){return transport(url,'omit');},
     key:function(type,code,repeat){window.WePlayTV&&WePlayTV.key(type,code,repeat);},
     cancelKey:function(code){

@@ -4,7 +4,7 @@
 
 ## 1. Скачайте WePlay и Node.js
 
-- [Скачать установочный пакет WePlay 1.0.4 для LG (.ipk)](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.4_all.ipk)
+- [Скачать установочный пакет WePlay 1.0.5 для LG (.ipk)](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.5_all.ipk)
 - Если на компьютере ещё нет Node.js, установите версию LTS. [Скачать Node.js](https://nodejs.org/en/download)
 
 ## 2. Включите Developer Mode на телевизоре
@@ -28,7 +28,7 @@ ares-novacom --device lg --getkey
 Когда терминал попросит `passphrase`, введите код с экрана телевизора. Регистр букв важен. Затем выполните ещё две команды.
 
 ```sh
-ares-install --device lg app.weplay.tv_1.0.4_all.ipk
+ares-install --device lg app.weplay.tv_1.0.5_all.ipk
 ares-launch --device lg app.weplay.tv
 ```
 
@@ -44,7 +44,7 @@ WePlay откроется на телевизоре. В следующий ра�
 
 Пакеты **1.0.3 и новее** поддерживают обновления из приложения. Когда рядом с **Поддержать** появится **Доступна новая версия**, нажмите её и выберите **Обновить сейчас**. WePlay перезапустится и сохранит историю и избранное.
 
-Если WePlay установлен из пакета **1.0.2** или более раннего, один раз установите IPK **1.0.4** поверх приложения. Для обновления системной иконки или сетевой службы понадобится новый IPK.
+Для расширенного поиска один раз установите IPK **1.0.5** поверх текущего приложения. Он обновляет сетевую службу; обновление интерфейса из приложения её не заменяет. История и избранное сохраняются. После установки обновления интерфейса продолжат приходить через интернет.
 
 ## Сборка из исходников
 
@@ -62,3 +62,4 @@ node webos/build.cjs ./app ./webos/dist
 </details>
 
 [Справка по командам webOS CLI](https://webostv.developer.lge.com/develop/tools/cli-dev-guide) · [Контрольные суммы файлов](../downloads/SHA256SUMS.txt)
+

@@ -54,7 +54,17 @@ function rememberCookies(target, entries) {
   while (cookies.size > 20) cookies.delete(cookies.keys().next().value);
 }
 
-function forward(raw, request, reply, withCookies, redirects, retried) {
+function searchPayload(target, raw) {
+  if (raw == null) return null;
+  if (!/^lordfilm26-kino\d+\.lat$/.test(target.hostname) || target.pathname !== '/engine/ajax/controller.php'
+    || target.search !== '?mod=media_catalog' || raw.length > 1024) throw new Error('Invalid catalog search');
+  const fields = JSON.parse(raw);
+  if (typeof fields.query !== 'string' || !fields.query.trim() || fields.query.length > 160
+    || typeof fields.csrf !== 'string' || !/^[a-f0-9]{32,128}$/i.test(fields.csrf)) throw new Error('Invalid catalog search');
+  return Buffer.from('action=search&query=' + encodeURIComponent(fields.query) + '&csrf=' + encodeURIComponent(fields.csrf));
+}
+
+function forward(raw, request, reply, withCookies, redirects, retried, search) {
   if (reply.destroyed || reply.finished) return;
   let target;
   try { target = new URL(raw); } catch (ignore) {}
@@ -65,10 +75,18 @@ function forward(raw, request, reply, withCookies, redirects, retried) {
     return;
   }
 
+  let body;
+  try { body = searchPayload(target, search); } catch (ignore) { reply.writeHead(400).end(); return; }
+
   const headers = {'User-Agent': 'Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36', 'Accept-Encoding': 'identity'};
   ['range', 'accept'].forEach(function (name) {
     if (request.headers[name]) headers[name] = request.headers[name];
   });
+  if (body) {
+    headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+    headers['Content-Length'] = body.length;
+    headers.Referer = target.origin + '/';
+  }
   const useCookies = withCookies && catalogHost.test(target.hostname);
   if (useCookies && cookies.has(target.hostname)) {
     const active = Array.from(cookies.get(target.hostname).values()).filter(cookie => cookie.expiresAt > Date.now()
@@ -78,7 +96,7 @@ function forward(raw, request, reply, withCookies, redirects, retried) {
   }
   let handedOff = false;
   const upstream = https.request({
-    hostname: target.hostname, path: target.pathname + target.search, method: request.method,
+    hostname: target.hostname, path: target.pathname + target.search, method: body ? 'POST' : request.method,
     headers: headers, lookup: lookup, agent: false
   }, function (response) {
     if (useCookies && response.headers['set-cookie']) rememberCookies(target, response.headers['set-cookie']);
@@ -87,7 +105,7 @@ function forward(raw, request, reply, withCookies, redirects, retried) {
       try { next = new URL(response.headers.location, target).href; } catch (ignore) {}
       handedOff = true;
       response.destroy();
-      forward(next, request, reply, withCookies, redirects + 1, retried);
+      forward(next, request, reply, withCookies, redirects + 1, retried, search);
       return;
     }
     responseHeaders.forEach(function (name) {
@@ -102,17 +120,17 @@ function forward(raw, request, reply, withCookies, redirects, retried) {
   function closeUpstream() { upstream.destroy(); }
   reply.once('close', closeUpstream);
   upstream.once('close', function () { reply.removeListener('close', closeUpstream); });
-  upstream.setTimeout(12000, closeUpstream);
+  upstream.setTimeout(body ? 30000 : 12000, closeUpstream);
   upstream.on('error', function (error) {
     if (handedOff || reply.destroyed || reply.finished) return;
     if (!reply.headersSent && !retried && ['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAIN'].indexOf(error.code) >= 0) {
-      forward(raw, request, reply, withCookies, redirects, true);
+      forward(raw, request, reply, withCookies, redirects, true, search);
       return;
     }
     if (reply.headersSent) reply.destroy();
     else reply.writeHead(502).end();
   });
-  upstream.end();
+  upstream.end(body || undefined);
 }
 
 module.exports = function createTransport() {
@@ -135,7 +153,9 @@ module.exports = function createTransport() {
       reply.setHeader('Cache-Control', 'no-store');
       if (request.method === 'OPTIONS') reply.writeHead(204).end();
       else if (request.method === 'GET' || request.method === 'HEAD') {
-        forward(url.searchParams.get('url'), request, reply, url.searchParams.get('session') === '1', 0);
+        const search = url.searchParams.get('catalogSearch');
+        if (search != null && request.method !== 'GET') reply.writeHead(405).end();
+        else forward(url.searchParams.get('url'), request, reply, url.searchParams.get('session') === '1', 0, false, search);
       } else reply.writeHead(405).end();
     });
     server.once('error', reject);

@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   var sources=[{id:'primary',name:'lord.kim',base:'https://lord.kim/'},{id:'sb',name:'sb.lordfilm5.pro',base:'https://sb.lordfilm5.pro/'},{id:'pub',name:'lordfilms.pub',base:'https://lordfilms.pub/'},
-    {id:'lat',name:'lordfilm26-kino11.lat',base:'https://lordfilm26-kino11.lat/',layout:'media'},
+    {id:'lat',name:'lordfilm26-kino11.lat',base:'https://lordfilm26-kino11.lat/',layout:'media',searchPublisher:'2070'},
     {id:'vc',name:'lordfilm.vc',base:'https://lordfilm.vc/',layout:'re'},
     {id:'st',name:'lordfilm.st',base:'https://lordfilm.st/',pending:true,note:'Сайт ограничивает автоматическое подключение'}];
   var union=window.WePlayCatalogUnion,feeds={},categoryGroups={};
@@ -14,7 +14,7 @@
   try{localStorage.setItem(MODE,'auto');localStorage.setItem('lord.catalog-union.v1','1');}catch(ignore){}
   function source(id){return sources.filter(function(s){return s.id===id;})[0];}
   function ready(s){return s&&!s.pending;}
-  function validId(id){return /^\d+$/.test(String(id))&&Number(id)>0||sources.some(function(s){return s.id!=='primary'&&new RegExp('^'+s.id+'-\\d+$').test(String(id));});}
+  function validId(id){return /^\d+$/.test(String(id))&&Number(id)>0||/^lat-kp-[1-9]\d{0,11}$/.test(String(id))||sources.some(function(s){return s.id!=='primary'&&new RegExp('^'+s.id+'-\\d+$').test(String(id));});}
   function notify(){window.dispatchEvent(new Event('catalogchange'));}
   function text(node){return node?(node.getAttribute&&node.getAttribute('content')||node.textContent||'').replace(/\s+/g,' ').trim():'';}
   function get(root,selector){return text(root.querySelector(selector));}
@@ -35,7 +35,11 @@
     if(s.layout==='media'&&/^lordfilm26-kino\d+\.lat$/.test(base.hostname)&&/^lordfilm26-kino\d+\.lat$/.test(candidate.hostname)&&/^\/\d+\/?$/.test(candidate.pathname)&&!candidate.username&&!candidate.password&&!candidate.port)return new URL(candidate.pathname,s.base).href;
     return'';
   }
-  function remember(item){if(item&&item.id){if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives)item._alternatives.forEach(remember);else index[String(item.id)]=item;if(item._categoryURL)paths[String(item.id)]=item._categoryURL;if(item.title)union.combine([item]);}}
+  function remember(item){if(item&&item.id){
+    var expanded=String(item.id).match(/^lat-kp-([1-9]\d{0,11})$/),x=union.fields(item);
+    if(expanded&&String(x.kinopoisk_id)===expanded[1])item=Object.assign({},item,{_source:'lat',_expanded:true,_detail:true,_video:{publisher:source('lat').searchPublisher,titleId:expanded[1],aggregator:'kp'},xfields:Object.assign({},x,{film:'https://plapi.cdnvideohub.com/api/v1/player/sv/playlist'})});
+    if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives)item._alternatives.forEach(remember);else index[String(item.id)]=item;if(item._categoryURL)paths[String(item.id)]=item._categoryURL;if(item.title)union.combine([item]);
+  }}
   function register(j){var d=j&&j.data;if(Array.isArray(d))d.forEach(remember);else if(d&&Array.isArray(d.items))d.items.forEach(remember);else if(d&&d.id)remember(d);return j;}
   Object.keys(stored).forEach(function(k){register(stored[k].data);});
   function key(params){return Object.keys(params).sort().filter(function(k){return params[k]!==undefined&&params[k]!==null;}).map(function(k){return k+'='+String(params[k]);}).join('&');}
@@ -58,8 +62,19 @@
     var abort=new AbortController(),timedOut=false,timer=setTimeout(function(){timedOut=true;abort.abort();},Math.min(remaining,3000));function cancel(){abort.abort();}if(signal)signal.addEventListener('abort',cancel);
     return fetch(raw,{signal:abort.signal,credentials:credentials||'omit'}).then(function(r){if(!r.ok)throw new Error('Источник ответил с ошибкой.');return json?r.json():r.text();}).catch(function(){if(signal&&signal.aborted)throw Object.assign(new Error('Поиск отменён'),{name:'AbortError'});throw new Error(timedOut?'Источник не ответил вовремя.':'Не удалось подключиться к источнику.');}).finally(function(){clearTimeout(timer);if(signal)signal.removeEventListener('abort',cancel);});
   }
+  function publicCatalogSearch(raw,query,csrf,options){
+    var remaining=(options&&options.deadline||Date.now()+15000)-Date.now(),signal=options&&options.signal;
+    if(remaining<=0)return Promise.reject(new Error('Источник не ответил вовремя.'));
+    if(signal&&signal.aborted)return Promise.reject(Object.assign(new Error('Поиск отменён'),{name:'AbortError'}));
+    var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},Math.min(remaining,25000));
+    function cancel(){controller.abort();}if(signal)signal.addEventListener('abort',cancel);
+    var fields={query:query,csrf:csrf},adapter=window.WePlayAndroid||window.WePlayWebOS,request={signal:controller.signal};
+    return Promise.resolve().then(function(){
+      return adapter&&adapter.catalogSearch?adapter.catalogSearch(raw,fields,request):fetch(raw,{method:'POST',credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'},body:new URLSearchParams({action:'search',query:query,csrf:csrf}).toString(),signal:controller.signal});
+    }).then(function(response){if(!response.ok)throw new Error('Расширенный каталог не ответил.');return response.json();}).then(function(data){if(!data||!data.ok||!Array.isArray(data.items))throw new Error('Расширенный каталог не ответил.');return data.items;}).finally(function(){clearTimeout(timer);if(signal)signal.removeEventListener('abort',cancel);});
+  }
   function documentAt(raw,s,timeout,options){return (options&&!options.reload?searchFetch(raw,false,'include',options):fetchData(raw,false,'include',timeout||8000,options&&options.reload)).then(function(html){if(s.layout==='media'&&/^\/\d+\/?$/.test(new URL(raw).pathname))delete memory['html:'+raw];return new DOMParser().parseFromString(html,'text/html');});}
-  function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,backdropURL:catalogBackdrop,pageURL:pageURL,remember:remember,search:!!options&&!options.reload,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
+  function webHelpers(options){var stamp=epoch;return{documentAt:function(raw,s,timeout){return documentAt(raw,s,timeout,options);},catalogSearch:function(raw,query,csrf){return publicCatalogSearch(raw,query,csrf,options);},get:get,list:list,text:text,url:url,imageURL:catalogImage,backdropURL:catalogBackdrop,pageURL:pageURL,remember:remember,search:!!options&&!options.reload,current:function(){return stamp===epoch&&!(options&&options.signal&&options.signal.aborted);},lookup:function(id){return index[String(id)];}};}
   function original(params,options){
     if(!window.WEPLAY_SETTINGS||!WEPLAY_SETTINGS.apiToken)return Promise.reject(new Error('Основной каталог недоступен без ключа.'));
     var q=Object.keys(params).filter(function(k){return params[k]!==undefined&&params[k]!==null;}).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);});q.push('token='+encodeURIComponent(WEPLAY_SETTINGS.apiToken));
@@ -102,7 +117,7 @@
   }
   function fact(doc,label){var value='';list(doc,'.flist li,.lfs-fact,.page__list li').some(function(row){var first=row.firstElementChild;if(first&&text(first).toLowerCase().indexOf(label.toLowerCase())===0){value=text(row).slice(text(first).length).replace(/^\s*:\s*/,'').trim();return true;}return false;});return value;}
   function detail(s,id,options){
-    var known=index[String(id)];if(!known||!known._url)throw new Error('Откройте фильм из каталога или поиска заново.');
+    var known=index[String(id)];if(known&&known._expanded)return Promise.resolve({success:true,data:known});if(!known||!known._url)throw new Error('Откройте фильм из каталога или поиска заново.');
     if(s.layout==='media')return WePlayWebCatalog.detail(known,s,webHelpers(options)).then(function(item){remember(item);return{success:true,data:item};});
     return documentAt(known._url,s,null,options).then(function(doc){
       var item={id:id,title:known.title,_source:s.id,_url:known._url,_kind:known._kind,_kindHint:WePlayWebCatalog.breadcrumbKind(doc)||known._kindHint,_detail:true,xfields:Object.assign({},known.xfields)},x=item.xfields;
@@ -344,9 +359,10 @@
     }).catch(function(){health[s.id]='unavailable';checked[s.id]=Date.now();notify();return {ready:false,message:'Сайт не ответил с телевизора'};}).finally(function(){clearTimeout(timer);});
   }
   function searchSources(){return sources.filter(ready).map(function(s){return s.id;});}
+  function searchBudget(id){return id==='lat'?28000:4000;}
   function searchKnown(){return union.combine(Object.keys(index).map(function(id){return index[id];}).filter(function(item){return item&&item.title&&searchSources().indexOf(item._source||'primary')>=0;}));}
   function searchRequest(id,query,page,options){
-    options=Object.assign({deadline:Date.now()+4000},options||{});
+    options=Object.assign({deadline:Date.now()+searchBudget(id)},options||{});
     var s=source(id),revision=epoch,params={action:'news',do:'list',page:page||1,limit:60,approve:1,search:query},k='search3|'+id+'|'+key(params);
     if(searchSources().indexOf(id)<0)return Promise.reject(new Error('Источник изменён.'));
     return Promise.resolve().then(function(){return id==='primary'?original(params,options):listing(s,params,options).then(function(j){
@@ -369,5 +385,5 @@
       return verify.then(function(kind){if(revision!==epoch||options.signal&&options.signal.aborted)return;if(kind){full._kind=kind;full._kindVerified=kind;full._kindVerifiedAt=Date.now();}remember(full);persist(s.id+'|'+key({action:'news',do:'get',id:full.id}),{success:true,data:full});});
     }).catch(function(){});}));
   }
-  window.WePlayCatalog={searchSources:searchSources,searchKnown:searchKnown,searchRequest:searchRequest,searchDetails:searchDetails,api:api,player:player,seasons:seasons,duration:duration,artwork:artwork,refreshBackdrops:refreshBackdrops,validId:validId,checkSource:checkSource,info:function(item,refresh){var records=versions(item),selected=records.filter(function(v){return String(v.id)===String(item._displayId||item.id);})[0]||records[0];return selected?rawDetail(selected,false,refresh):Promise.resolve(item);},dedupe:union.combine,same:union.same,find:union.find,versions:function(item){var seen={};return versions(item).filter(function(v){var id=v._source||'primary';if(seen[id])return false;seen[id]=true;return true;}).map(function(v){return {id:v.id,source:v._source||'primary',name:source(v._source||'primary').name};});},remember:remember,snapshot:function(){return{mode:mode,active:active&&active.id,name:mode==='auto'?'Все источники':active&&active.name,combined:mode==='auto',offline:offline,health:Object.assign({},health),sources:sources.map(function(s){return{id:s.id,name:s.name,pending:!ready(s),note:s.note};})};}};
+  window.WePlayCatalog={searchBudget:searchBudget,searchSources:searchSources,searchKnown:searchKnown,searchRequest:searchRequest,searchDetails:searchDetails,api:api,player:player,seasons:seasons,duration:duration,artwork:artwork,refreshBackdrops:refreshBackdrops,validId:validId,checkSource:checkSource,info:function(item,refresh){var records=versions(item),selected=records.filter(function(v){return String(v.id)===String(item._displayId||item.id);})[0]||records[0];return selected?rawDetail(selected,false,refresh):Promise.resolve(item);},dedupe:union.combine,same:union.same,find:union.find,versions:function(item){var seen={};return versions(item).filter(function(v){var id=v._source||'primary';if(seen[id])return false;seen[id]=true;return true;}).map(function(v){return {id:v.id,source:v._source||'primary',name:source(v._source||'primary').name};});},remember:remember,snapshot:function(){return{mode:mode,active:active&&active.id,name:mode==='auto'?'Все источники':active&&active.name,combined:mode==='auto',offline:offline,health:Object.assign({},health),sources:sources.map(function(s){return{id:s.id,name:s.name,pending:!ready(s),note:s.note};})};}};
 }());
