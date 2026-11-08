@@ -36,7 +36,7 @@
   var preview=null,seekRun=0,lastSeekKeyAt=0,menuClose=null,menuShade=null,qualityPreference=0,selectedQuality=0,bufferTimer=null,pointerCleanup=null;
   var runningEpisode=null,started=false,runningEnded=false,resumeTarget=0,lastSavedAt=0;
   var postplay=null,postplayDismissals={},postplayAutoplay=true,remoteSeekKey=0;
-  var streamInfo=null,audioSourcePreference='',audioLoading=false;
+  var streamInfo=null,audioSourcePreference='',audioLoading=false,audioSourcesRequested=false;
   var recoveryTimer=null,stallTimer=null,recoveryAttempts=0,failedResolutions=[];
   try{audioPreference=localStorage.getItem('lord.audioPreference')||'';}catch(ignore){}
   try{audioSourcePreference=localStorage.getItem('weplay.audioSourcePreference')||'';}catch(ignore){}
@@ -247,7 +247,13 @@
     if(!tracks.length&&names.length)tracks=names.map(function(n,i){return {index:i,label:n};});
     return tracks.filter(function(t){return t.label.toLowerCase()!=='delete';}).sort(function(a,b){return (order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);});
   }
+  function loadAdditionalAudio(){
+    if(!options.loadSources||audioSourcesRequested)return;
+    var owner=options;audioSourcesRequested=true;audioLoading=true;
+    options.loadSources(function(){if(active&&options===owner){updateControls();refreshAudioMenu();}}).catch(function(){}).then(function(){if(active&&options===owner){audioLoading=false;updateControls();refreshAudioMenu();}});
+  }
   function chooseAudio(){
+    loadAdditionalAudio();
     var tracks=audioOptions();
     if(!tracks.length){show();options.status.textContent='Дополнительных звуковых дорожек нет';setTimeout(function(){if(active)options.status.textContent='';},2500);return;}
     choose('Озвучка',tracks.map(function(t){return{label:t.label,caption:t.caption,value:t.index,active:t.index===audioSelection()};}),function(i){
@@ -516,10 +522,10 @@
       this.close();options=opts;postplayDismissals={};episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
       episodeIndex=opts.resume?WePlaySeasons.resumeIndex(episodes,opts.resume):opts.startSeason===undefined||opts.startSeason===null?0:WePlaySeasons.startIndex(episodes,opts.startSeason);
       if(episodeIndex<0)throw new Error(opts.resume?'Сохранённая серия недоступна в этом источнике.':'Выбранный сезон недоступен в этом источнике.');
+      WePlayNetwork.setPlayback(true);audioSourcesRequested=false;
       active=true;document.body.classList.add('native-playing');startEpisode(opts.resume?opts.resume.position:0);report('nativeResolved',episodes.length);
-      if(opts.loadSources){var owner=options;audioLoading=true;opts.loadSources(function(){if(active&&options===owner){updateControls();refreshAudioMenu();}}).catch(function(){}).then(function(){if(active&&options===owner){audioLoading=false;updateControls();refreshAudioMenu();}});}
     },
-    close:function(){++request;active=false;stopEngine();closeMenu(false);if(bar)bar.remove();bar=null;timeline=null;controlsFocused=false;suspended=false;clearTimeout(timer);document.body.classList.remove('native-playing');document.getElementById('player').classList.remove('native-loading');api=null;options=null;streamInfo=null;audioLoading=false;},
+    close:function(){if(window.WePlayNetwork&&!document.body.classList.contains('playback-open'))WePlayNetwork.setPlayback(false);audioSourcesRequested=false;++request;active=false;stopEngine();closeMenu(false);if(bar)bar.remove();bar=null;timeline=null;controlsFocused=false;suspended=false;clearTimeout(timer);document.body.classList.remove('native-playing');document.getElementById('player').classList.remove('native-loading');api=null;options=null;streamInfo=null;audioLoading=false;},
     pauseForBackground:function(){
       if(!active)return;
       postplayAutoplay=false;remoteSeekKey=0;

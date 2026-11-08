@@ -55,7 +55,7 @@
     function update(){aborted(signal);if(options.onUpdate)options.onUpdate(result(true));}
     function request(source,value,page){
       aborted(signal);
-      var scope={signal:signal,deadline:Date.now()+(WePlayCatalog.searchBudget?WePlayCatalog.searchBudget(source):4000)};return WePlayCatalog.searchRequest(source,value,page,scope).then(function(j){aborted(signal);used[source]=true;if(j._saved||j.data&&j.data.partial)failed[source]=true;else{networkCount++;delete failed[source];}var d=j.data,items=Array.isArray(d)?d:d.items||d.news||[];var matches=rank(items,query).slice(0,4);if(!matches.length&&items.length){scope.aliases=true;matches=items.slice(0,6);}return WePlayCatalog.searchDetails(matches,scope).then(function(){
+      var scope={signal:signal,media:options.media,deadline:Date.now()+(WePlayCatalog.searchBudget?WePlayCatalog.searchBudget(source):4000)};return WePlayCatalog.searchRequest(source,value,page,scope).then(function(j){aborted(signal);used[source]=true;if(j._saved||j.data&&j.data.partial)failed[source]=true;else{networkCount++;delete failed[source];}var d=j.data,items=Array.isArray(d)?d:d.items||d.news||[];var matches=rank(items,query).slice(0,4);if(!matches.length&&items.length){scope.aliases=true;matches=items.slice(0,6);}return WePlayCatalog.searchDetails(matches,scope).then(function(){
         aborted(signal);pool=pool.concat(items);var own=[];
         // Ranking combines records globally. A source may finish its own query variants
         // only after a match from that source, rather than another catalog's exact hit.
@@ -77,7 +77,7 @@
       // Give every responsive source its own next-page slot, even when a faster
       // catalog already filled the results. Keep work bounded on older televisions.
       aborted(signal);return Promise.all(sources.map(function(source){var jobs=more[source]||[];jobs.sort(function(a,b){return b.matches-a.matches;});if(jobs.length)return request(source,jobs[0].query,2);}));
-    }).then(function(){aborted(signal);var top=rank(pool,query).slice(0,30);return WePlayCatalog.searchDetails(top,{signal:signal,deadline:Date.now()+4000});}).then(function(){
+    }).then(function(){aborted(signal);var top=rank(pool,query).slice(0,30);return WePlayCatalog.searchDetails(top,{signal:signal,media:options.media,deadline:Date.now()+4000});}).then(function(){
       aborted(signal);pool=pool.concat(WePlayCatalog.searchKnown());var final=result(false);
       if(!final.partial&&final.sources.length){cache[key]={at:Date.now(),data:final};var keys=Object.keys(cache).sort(function(a,b){return cache[a].at-cache[b].at;});while(keys.length>12)delete cache[keys.shift()];}
       return final;

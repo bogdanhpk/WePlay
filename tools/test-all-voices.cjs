@@ -1,9 +1,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const source=path.resolve(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'../app'));
 const replies=new Map(),calls=[];
-const c={URL,URLSearchParams,AbortController,Event,Date,Promise,setTimeout,clearTimeout,console,localStorage:{getItem:()=>null,setItem:()=>{}},document:{getElementById:()=>({addEventListener:()=>{}})},addEventListener:()=>{},dispatchEvent:()=>{},fetch:async url=>{calls.push(url);if(!replies.has(url))throw Error('Unavailable fixture');const value=replies.get(url);return{ok:true,json:async()=>value,text:async()=>value};}};
+const c={URL,URLSearchParams,AbortController,Event,CustomEvent,Date,Promise,setTimeout,clearTimeout,console,localStorage:{getItem:()=>null,setItem:()=>{}},document:{getElementById:()=>({addEventListener:()=>{}})},addEventListener:()=>{},dispatchEvent:()=>{},fetch:async url=>{calls.push(url);if(!replies.has(url))throw Error('Unavailable fixture');const value=replies.get(url);return{ok:true,json:async()=>value,text:async()=>value};}};
 c.window=c;vm.createContext(c);
-for(const file of ['catalog-union.js','seasons.js','native-player.js','catalog.js'])vm.runInContext(fs.readFileSync(path.join(source,file),'utf8'),c);
+for(const file of ['network.js','catalog-union.js','seasons.js','native-player.js','catalog.js'])vm.runInContext(fs.readFileSync(path.join(source,file),'utf8'),c);
 const catalog=c.WePlayCatalog,normal=value=>JSON.parse(JSON.stringify(value));
 let sequence=0;
 function item(source,title,serial=false){const id=source==='primary'?String(++sequence):source+'-'+(++sequence);return{id,title,_source:source,_kind:serial?'series':'movie',_detail:true,xfields:{year:'2026',original_title:title,postproduction:'Неверная озвучка из описания',film:'https://fixture.invalid/'+id}};}
@@ -30,5 +30,8 @@ function video(record,rows){record._video={publisher:'fixture',titleId:String(re
  video(seriesB,[{vkId:'b2',voiceStudio:'B2',season:1,episode:2},{vkId:'b3',voiceStudio:'B3',season:2,episode:1}]);catalog.remember(seriesA);catalog.remember(seriesB);
  const serial=c.WePlayCatalogUnion.combine([seriesA,seriesB])[0],p=await catalog.player(serial,null,null,{sourceId:seriesA.id,season:1,episode:2});await p.loadSources();
  assert.equal(p.payload.episodes.length,2);assert.deepEqual(normal(p.payload.episodes[0].variants.map(v=>v.label)),['A1']);assert.deepEqual(normal(p.payload.episodes[1].variants.map(v=>v.label)),['A2','B2']);
- console.log(JSON.stringify({result:'PASS',checks:['first-source startup is independent of other providers','all sources enrich the same stable episode objects','identical video IDs deduplicate; distinct recordings retain source labels','legacy HLS keeps transport and exact audio-track index','API tracks resolve through their owning source','offline sources do not cancel healthy sources','series merge only matching season and episode']}));
+ const held=item('pub','Playback priority');video(held,[{vkId:'priority',voiceStudio:'Priority'}]);catalog.remember(held);
+ c.WePlayNetwork.setPlayback(true);const background=catalog.voices(held);await new Promise(resolve=>setTimeout(resolve,0));
+ let timeout;try{const playing=await Promise.race([catalog.player(held),new Promise((resolve,reject)=>{timeout=setTimeout(()=>reject(Error('Playback waited for a suspended profile request')),2000);})]);assert.equal(playing.payload.episodes[0].variants[0].label,'Priority');assert.equal(c.WePlayNetwork.snapshot().backgroundActive,0);}finally{clearTimeout(timeout);c.WePlayNetwork.setPlayback(false);}await background;
+ console.log(JSON.stringify({result:'PASS',checks:['first-source startup is independent of other providers','all sources enrich the same stable episode objects','identical video IDs deduplicate; distinct recordings retain source labels','legacy HLS keeps transport and exact audio-track index','API tracks resolve through their owning source','offline sources do not cancel healthy sources','series merge only matching season and episode','playback never joins a suspended profile voice request']}));
 })().catch(e=>{console.error(e);process.exit(1);});

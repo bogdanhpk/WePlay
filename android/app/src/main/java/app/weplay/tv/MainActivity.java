@@ -127,6 +127,7 @@ public final class MainActivity extends Activity {
                 if (!localPage() || updates == null) return;
                 try {
                     JSONObject command = new JSONObject(raw); String action = command.getString("action");
+                    if (action.equals("playback")) { updates.playback(command.optBoolean("active", false)); return; }
                     if (action.equals("status")) { updates.status(); return; }
                     if (action.equals("cancel")) { updates.cancel(); return; }
                     if (!resumed || !command.optBoolean("idle", false)) {

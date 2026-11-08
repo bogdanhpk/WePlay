@@ -597,7 +597,7 @@
     playingRestart=!!restart;var progress=WePlayProgress.get(item),resume=!playingSeason&&!restart&&WePlayProgress.canResume(progress)?progress:null,resetOnStart=!!restart;
     var id=++playerGeneration;activeSource=2;
     if(overlay.hidden)savedFocus=document.activeElement;
-    document.body.classList.add('playback-open');stage.scrollTop=0;stage.scrollLeft=0;
+    document.body.classList.add('playback-open');WePlayNetwork.setPlayback(true);stage.scrollTop=0;stage.scrollLeft=0;
     overlay.hidden=false;overlay.classList.add('player-resolving');surface.innerHTML='';
     document.getElementById('player-title').textContent=text(item.title);status.textContent='Загружаем видео…';document.getElementById('player-retry').hidden=true;hint.textContent='Подождите немного · Назад — вернуться к фильму';
     document.getElementById('player-back').focus();showPlayerTools();
@@ -635,6 +635,7 @@
   }
   function closePlayer() {
     document.body.classList.remove('playback-open');
+    WePlayNetwork.setPlayback(false);
     exitDialog.hidden=true;overlay.removeAttribute('aria-hidden');exitResume=false;exitFocus=null;
     if(playerFetchAbort)playerFetchAbort.abort();playerFetchAbort=null;playingItem=null;playingChoice=null;playingSeason=null;
     if(window.WePlayNativePlayer)WePlayNativePlayer.close();

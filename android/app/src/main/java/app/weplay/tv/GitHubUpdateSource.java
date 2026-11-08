@@ -9,7 +9,18 @@ import java.util.Arrays;
 
 /** TLS verification stays enabled; APKs and redirects are limited to GitHub-owned hosts. */
 final class GitHubUpdateSource implements ApkUpdates.Source {
+    private HttpURLConnection active;
+    private int generation;
+    private boolean paused;
+    @Override public void playback(boolean value) {
+        HttpURLConnection connection;
+        synchronized (this) { paused = value; if (!value) return; generation++; connection = active; active = null; }
+        if (connection != null) connection.disconnect();
+    }
+    private synchronized void release(HttpURLConnection connection) { if (active == connection) active = null; }
     @Override public InputStream open(String address) throws Exception {
+        final int requestGeneration;
+        synchronized (this) { if (paused) throw new IOException("Playback active"); requestGeneration = generation; }
         URL url = new URL(address);
         for (int hop = 0; hop < 6; hop++) {
             if (!"https".equals(url.getProtocol()) || url.getUserInfo() != null
@@ -17,6 +28,10 @@ final class GitHubUpdateSource implements ApkUpdates.Source {
                 || !Arrays.asList("raw.githubusercontent.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com").contains(url.getHost()))
                 throw new IOException("Unexpected update host");
             HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+            synchronized (this) {
+                if (requestGeneration != generation) { connection.disconnect(); throw new IOException("Cancelled"); }
+                active = connection;
+            }
             connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(10000); connection.setReadTimeout(15000);
             connection.setUseCaches(false);
@@ -28,13 +43,13 @@ final class GitHubUpdateSource implements ApkUpdates.Source {
                 if (status >= 300 && status < 400) {
                     String next = connection.getHeaderField("Location");
                     if (next == null) throw new IOException("Missing redirect");
-                    URL redirect = new URL(url, next); connection.disconnect(); url = redirect; continue;
+                    URL redirect = new URL(url, next); release(connection); connection.disconnect(); url = redirect; continue;
                 }
                 if (status != 200) throw new IOException("Update HTTP " + status);
                 return new FilterInputStream(connection.getInputStream()) {
-                    @Override public void close() throws IOException { try { super.close(); } finally { connection.disconnect(); } }
+                    @Override public void close() throws IOException { try { super.close(); } finally { release(connection); connection.disconnect(); } }
                 };
-            } catch (Exception error) { connection.disconnect(); throw error; }
+            } catch (Exception error) { release(connection); connection.disconnect(); throw error; }
         }
         throw new IOException("Too many update redirects");
     }

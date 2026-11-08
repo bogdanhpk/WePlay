@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 
 /** Owns only files/updates. WebView storage, viewing history and favourites are never modified. */
 final class ApkUpdates {
-    interface Source { InputStream open(String address) throws Exception; }
+    interface Source { InputStream open(String address) throws Exception; default void playback(boolean active) { } }
     interface Listener { void state(JSONObject state); void install(File file); }
     private final Context context;
     private final File directory;
@@ -34,7 +34,8 @@ final class ApkUpdates {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile Listener listener;
     private ApkUpdate candidate;
-    private boolean checking, downloading, downloaded, installing, permission;
+    private boolean checking, downloading, downloaded, installing, permission, playback;
+    private int checkGeneration;
     private volatile boolean closed;
     private volatile boolean cancelled;
     private long lastCheck, received;
@@ -96,10 +97,22 @@ final class ApkUpdates {
     }
     private synchronized void emit() { JSONObject state = snapshot(); main.post(() -> { Listener sink = listener; if (!closed && sink != null) sink.state(state); }); }
     synchronized void status() { emit(); }
+    synchronized void playback(boolean active) {
+        if (playback == active) return;
+        playback = active;
+        source.playback(active);
+        if (active) {
+            checkGeneration++; checking = false; lastCheck = 0;
+            if (downloading) cancelled = true;
+            emit();
+        } else check(false);
+    }
     synchronized void check(boolean force) {
-        if (closed || checking || downloading || installing || !force && System.currentTimeMillis() - lastCheck < 60000) { emit(); return; }
+        if (closed || playback || checking || downloading || installing || !force && System.currentTimeMillis() - lastCheck < 60000) { emit(); return; }
+        int generation = ++checkGeneration;
         lastCheck = System.currentTimeMillis(); checking = true; emit();
         worker.execute(() -> {
+            synchronized (ApkUpdates.this) { if (closed || playback || generation != checkGeneration) return; }
             ApkUpdate update = null; boolean failed = false;
             try (InputStream input = source.open(manifestUrl + (manifestUrl.contains("?") ? "&" : "?") + "check=" + System.currentTimeMillis() / 60000)) {
                 update = parse(new JSONObject(new String(read(input, 65536), StandardCharsets.UTF_8)));
@@ -107,7 +120,7 @@ final class ApkUpdates {
             ApkUpdate found = update; boolean unavailable = failed;
             main.post(() -> {
                 synchronized (ApkUpdates.this) {
-                    if (closed) return; checking = false;
+                    if (closed || generation != checkGeneration) return; checking = false;
                     if (!downloading && !installing && !permission && !unavailable && found != null && found.code > installedCode && (candidate == null || found.code > candidate.code)) {
                         candidate = found; downloaded = false; received = 0; permission = false; error = "";
                         try { persist(found); } catch (Exception ignored) { }

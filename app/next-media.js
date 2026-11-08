@@ -18,13 +18,13 @@
   function resolve(item,options){
     options=options||{};var signal=options.signal,entry=indexed(item);aborted(signal);
     if(WePlayCatalogUnion.kind(item)==='series')return Promise.resolve(null);
-    var lookup=entry.known?Promise.resolve(entry.next):WePlayTMDB.nextPart(item).catch(function(){return null;});
+    var lookup=entry.known?Promise.resolve(entry.next):WePlayTMDB.nextPart(item,{signal:signal,media:true}).catch(function(){return null;});
     return lookup.then(function(part){
       aborted(signal);if(!part)return null;
       function pick(items){return items.filter(function(candidate){return !WePlayCatalogUnion.same(item,candidate)&&matches(candidate,part);})[0]||null;}
-      var known=pick(WePlayCatalog.searchKnown());if(known)return{item:known,title:known.title,caption:part.release_date.slice(0,4),kind:'movie'};
+      var known=pick(WePlayCatalog.searchKnown());if(known)return{item:known,title:known.title,caption:part.release_date.slice(0,4),kind:'movie',image:part.backdrop_path?'https://image.tmdb.org/t/p/w500/'+part.backdrop_path.replace(/^\//,''):''};
       var year=part.release_date.slice(0,4),queries=[part.title+' '+year];if(part.original_title&&part.original_title!==part.title)queries.push(part.original_title+' '+year);
-      function search(at){aborted(signal);if(at>=queries.length)return Promise.resolve(null);return WePlaySearch.search(queries[at],{signal:signal}).then(function(result){aborted(signal);var candidate=pick(result.items);return candidate?{item:candidate,title:candidate.title,caption:year,kind:'movie'}:search(at+1);});}
+      function search(at){aborted(signal);if(at>=queries.length)return Promise.resolve(null);return WePlaySearch.search(queries[at],{signal:signal,media:true}).then(function(result){aborted(signal);var candidate=pick(result.items);return candidate?{item:candidate,title:candidate.title,caption:year,kind:'movie',image:part.backdrop_path?'https://image.tmdb.org/t/p/w500/'+part.backdrop_path.replace(/^\//,''):''}:search(at+1);});}
       return search(0);
     });
   }

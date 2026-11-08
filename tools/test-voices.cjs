@@ -3,7 +3,7 @@ const source=path.resolve(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'..
 const replies=new Map(),calls=[];
 const c={URL,URLSearchParams,AbortController,Event,Date,Promise,setTimeout,clearTimeout,console,localStorage:{getItem:()=>null,setItem:()=>{}},document:{getElementById:()=>({addEventListener:()=>{}})},addEventListener:()=>{},dispatchEvent:()=>{},fetch:async url=>{calls.push(url);if(!replies.has(url))throw Error('Unavailable fixture');const value=replies.get(url);return{ok:true,json:async()=>value,text:async()=>value};}};
 c.window=c;vm.createContext(c);
-for(const file of ['catalog-union.js','seasons.js','native-player.js','catalog.js'])vm.runInContext(fs.readFileSync(path.join(source,file),'utf8'),c);
+for(const file of ['network.js','catalog-union.js','seasons.js','native-player.js','catalog.js'])vm.runInContext(fs.readFileSync(path.join(source,file),'utf8'),c);
 const catalog=c.WePlayCatalog,normal=value=>JSON.parse(JSON.stringify(value));
 let sequence=0;
 function item(source,title,serial=false){const id=source==='primary'?String(++sequence):source+'-'+(++sequence);return{id,title,_source:source,_kind:serial?'series':'movie',_detail:true,xfields:{year:'2026',original_title:title,postproduction:'Неверная озвучка из описания',film:'https://fixture.invalid/'+id}};}

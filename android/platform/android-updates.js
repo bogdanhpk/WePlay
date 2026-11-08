@@ -8,6 +8,7 @@
   var apply=modal.querySelector('#update-apply'),later=modal.querySelector('#update-later'),description=modal.querySelector('#update-description'),heading=modal.querySelector('#update-title'),progress=modal.querySelector('[role="progressbar"]'),fill=progress.firstElementChild;
   function idle(){return !document.hidden&&!document.body.classList.contains('playback-open')&&!(window.WePlayNativePlayer&&WePlayNativePlayer.active);}
   function send(action){if(window.WePlayUpdateBridge)WePlayUpdateBridge.postMessage(JSON.stringify({action:action,idle:idle()}));}
+  window.addEventListener('weplay:playback',function(event){if(window.WePlayUpdateBridge)WePlayUpdateBridge.postMessage(JSON.stringify({action:'playback',active:!!event.detail}));});
   function preferred(){return document.activeElement===later||apply.disabled?later:apply;}
   function close(restore){
     if(!opened)return;autoInstall=false;send('cancel');
