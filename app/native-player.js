@@ -8,8 +8,12 @@
       if(c==='"'||c==="'"){quote=c;continue;}if(c===open)depth++;if(c===close&&--depth===0)return s.slice(start,i+1);
     }throw new Error('Не удалось прочитать список серий');
   }
+  function previewSources(html,list){
+    if(window.WePlaySeekPreview){var defaults=typeof html==='string'?WePlaySeekPreview.read(html):html&&html.preview;list.forEach(function(e){e.seekPreview=WePlaySeekPreview.source(e.seekPreview||e.preview,defaults,e.hls);});}
+    return list;
+  }
   function parse(html){
-    if(html&&typeof html==='object'&&Array.isArray(html.episodes)){var supplied=html.episodes.filter(function(e){return Array.isArray(e.variants)&&e.variants.length;});if(!supplied.length)throw new Error('Нет доступных серий.');return supplied;}
+    if(html&&typeof html==='object'&&Array.isArray(html.episodes)){var supplied=html.episodes.filter(function(e){return Array.isArray(e.variants)&&e.variants.length;});if(!supplied.length)throw new Error('Нет доступных серий.');return previewSources(html,supplied);}
     var m=/\bseasons\s*:\s*\[/.exec(html),episodes=[],auth=/var\s+lok\s*=\s*\d+\s*,\s*\w+\s*=\s*"([^"]+)"/.exec(html);
     if(m){
       var start=html.indexOf('[',m.index),seasons=JSON.parse(balanced(html,start));
@@ -23,7 +27,7 @@
     }
     if(!episodes.length)throw new Error('В этом источнике пока нет доступного видео.');
     episodes.forEach(function(e){if(auth)e.hls+='&'+auth[1];var u=new URL(e.hls);if(!/^https?:$/.test(u.protocol))throw new Error('Некорректный адрес видео');});
-    return episodes;
+    return previewSources(html,episodes);
   }
   function el(tag,cls,label){var e=document.createElement(tag);if(cls)e.className=cls;if(label!==undefined)e.textContent=label;return e;}
   function playerIcon(name){return /^(?:x$|plus|check|arrow-|caret-)/.test(name)?window.WEPLAY_ICONS[name]||'':window.WEPLAY_PLAYER_ICONS&&window.WEPLAY_PLAYER_ICONS[name]||window.WEPLAY_ICONS[name]||'';}
@@ -32,7 +36,7 @@
   var currentTime=0,totalTime=0,audioPreference='',timeline=null;
   var controlsFocused=false,barSelection='native-toggle',menuBack=null,suspended=false,wantsPlay=true,failed=false,loading=true;
   var elapsed=null,remaining=null,nowTitle=null,nowEpisode=null,stateLabel=null,toggleButton=null,audioButton=null,episodeButton=null,retryButton=null;
-  var seekBar=null,seekKnob=null,seekBubble=null,bufferFill=null,finishLabel=null,settingsButton=null,previousButton=null,nextButton=null,qualityBadge=null;
+  var seekBar=null,seekKnob=null,seekBubble=null,seekTime=null,seekFrames=null,bufferFill=null,finishLabel=null,settingsButton=null,previousButton=null,nextButton=null,qualityBadge=null;
   var preview=null,seekRun=0,lastSeekKeyAt=0,menuClose=null,menuShade=null,qualityPreference=0,selectedQuality=0,bufferTimer=null,pointerCleanup=null;
   var runningEpisode=null,started=false,runningEnded=false,resumeTarget=0,lastSavedAt=0;
   var postplay=null,postplayDismissals={},postplayAutoplay=true,remoteSeekKey=0;
@@ -43,7 +47,7 @@
   try{qualityPreference=Number(localStorage.getItem('lord.quality.v1'))||0;}catch(ignore){}
   function put(node,value){if(node&&node.textContent!==value)node.textContent=value;}
   function report(t,d){if(options&&options.log)options.log(t,d);}
-  function error(message){saveProgress(true);clearTimeout(prepareTimer);clearTimeout(bufferTimer);if(preview){wantsPlay=preview.playing;preview=null;}if(pointerCleanup)pointerCleanup();if(seekBubble)seekBubble.hidden=true;closeMenu(false);failed=true;loading=false;if(options){options.status.textContent=message;report('nativeError',message);barSelection='native-retry';show(true);}}
+  function error(message){saveProgress(true);clearTimeout(prepareTimer);clearTimeout(bufferTimer);if(preview){wantsPlay=preview.playing;preview=null;}if(pointerCleanup)pointerCleanup();if(seekBubble)seekBubble.hidden=true;if(seekFrames)seekFrames.hide();closeMenu(false);failed=true;loading=false;if(options){options.status.textContent=message;report('nativeError',message);barSelection='native-retry';show(true);}}
   function androidFailure(token,reason){
     if(token!==request||failed||recoveryTimer!==null)return;
     clearTimeout(stallTimer);
@@ -135,6 +139,7 @@
   function stopEngine(){
     saveProgress(true);runningEpisode=null;started=false;
     if(postplay){postplay.destroy();postplay=null;}
+    if(seekFrames){seekFrames.destroy();seekFrames=null;}
     document.body.classList.remove('avplay-active');
     clearTimeout(prepareTimer);clearTimeout(bufferTimer);clearTimeout(stallTimer);clearTimeout(recoveryTimer);recoveryTimer=null;preview=null;remoteSeekKey=0;if(pointerCleanup)pointerCleanup();
     if(hls){hls.destroy();hls=null;}
@@ -168,7 +173,7 @@
   function seekTo(target){try{resumeTarget=0;runningEnded=false;currentTime=clamp(target);if(api&&['PLAYING','PAUSED'].indexOf(api.getState())>=0)api.seekTo(currentTime,function(){saveProgress(true);},function(){});else if(video)video.currentTime=currentTime/1000;tick(currentTime);if(!api)saveProgress(true);}catch(ignore){}}
   function seek(seconds){if(totalTime<=0||failed)return;seekTo(currentTime+seconds*1000);if(!menu)show(controlsFocused);}
   function seekKey(code,repeat){
-    if(WePlayTV.name==='android'&&!repeat){
+    if(WePlayTV.name==='android'&&!repeat&&document.activeElement!==seekBar){
       remoteSeekKey=code;
       return;
     }
@@ -182,7 +187,7 @@
     show(false);controlsFocused=true;WePlayFocus.focus(seekBar);tick(currentTime);clearTimeout(timer);
   }
   function finishSeek(commit,forcePlay){
-    if(!preview)return;var saved=preview;preview=null;seekRun=0;remoteSeekKey=0;
+    if(!preview)return;var saved=preview;preview=null;seekRun=0;remoteSeekKey=0;if(seekFrames)seekFrames.hide();
     if(commit)seekTo(saved.target);
     wantsPlay=forcePlay===undefined?saved.playing:forcePlay;if(wantsPlay)play();else pause();
     show(false);controlsFocused=true;WePlayFocus.focus(seekBar);tick(currentTime);armHide();report(commit?'seekCommitted':'seekCancelled',Math.round((commit?saved.target:saved.origin)/1000));
@@ -194,7 +199,11 @@
     var position=preview?preview.target:ms,ratio=totalTime>0?Math.max(0,Math.min(1,position/totalTime)):0;
     put(elapsed,time(position));put(remaining,totalTime>0?time(totalTime):'—');
     if(timeline)timeline.style.transform='scaleX('+ratio+')';if(seekKnob)seekKnob.style.left=(ratio*100)+'%';
-    if(seekBubble){seekBubble.hidden=!preview;if(preview){seekBubble.style.left=(ratio*100)+'%';put(seekBubble,time(position));}}
+    if(seekBubble){
+      seekBubble.hidden=!preview;
+      if(preview){put(seekTime,time(position));if(seekFrames)seekFrames.show(position);var half=seekBubble.offsetWidth/2,width=seekBar.clientWidth;seekBubble.style.left=Math.max(half+8,Math.min(width-half-8,ratio*width))+'px';}
+      else if(seekFrames)seekFrames.hide();
+    }
     if(seekBar){seekBar.setAttribute('aria-valuemax',String(Math.floor(totalTime/1000)||0));seekBar.setAttribute('aria-valuenow',String(Math.floor(position/1000)));seekBar.setAttribute('aria-valuetext',time(position)+' из '+time(totalTime));seekBar.setAttribute('aria-disabled',String(totalTime<=0||failed));}
     var buffered=0;try{if(video&&video.buffered.length)buffered=video.buffered.end(video.buffered.length-1)*1000;}catch(ignore){}
     if(bufferFill)bufferFill.style.transform='scaleX('+(totalTime>0?Math.max(0,Math.min(1,buffered/totalTime)):0)+')';
@@ -380,6 +389,7 @@
   function startEngine(token,stream,position){
     streamInfo=typeof stream==='object'?stream:null;
     if(streamInfo)serverOffset=streamInfo.serverTime?streamInfo.serverTime-Date.now():0;
+    if(seekFrames)seekFrames.source(streamInfo&&streamInfo.seekPreview||runningEpisode&&runningEpisode.seekPreview);
     var raw=typeof stream==='string'?stream:stream.url;
     var mp4=stream.format==='mp4'||stream.format!=='hls'&&/\.mp4(?:[?#]|$)/i.test(raw);
     if(!mp4&&window.Hls&&Hls.isSupported()){
@@ -496,7 +506,7 @@
     var now=el('header','native-now'),exit=control('native-exit','Назад','arrow-left',undefined,function(){if(options.onExit)options.onExit();});now.appendChild(exit);
     var name=el('div','native-now-copy');nowTitle=el('h2','native-now-title');nowEpisode=el('p','native-now-episode');stateLabel=el('span','native-state');name.appendChild(nowTitle);name.appendChild(nowEpisode);now.appendChild(name);now.appendChild(stateLabel);bar.appendChild(now);
     var bottom=el('div','native-bottom');seekBar=el('div','native-timeline focusable');seekBar.id='native-seek';seekBar.tabIndex=0;seekBar.setAttribute('role','slider');seekBar.setAttribute('aria-label','Перемотка');seekBar.setAttribute('aria-valuemin','0');seekBar.setAttribute('aria-valuemax','0');seekBar.setAttribute('aria-valuenow','0');
-    var track=el('div','native-track');bufferFill=el('span','native-buffer-fill');timeline=el('span','native-timeline-fill');seekKnob=el('span','native-seek-knob');seekBubble=el('span','native-seek-bubble');seekBubble.hidden=true;track.appendChild(bufferFill);track.appendChild(timeline);track.appendChild(seekKnob);seekBar.appendChild(track);seekBar.appendChild(seekBubble);bottom.appendChild(seekBar);
+    var track=el('div','native-track');bufferFill=el('span','native-buffer-fill');timeline=el('span','native-timeline-fill');seekKnob=el('span','native-seek-knob');seekBubble=el('div','native-seek-bubble');seekBubble.hidden=true;seekBubble.setAttribute('aria-hidden','true');var frameHost=el('div','native-seek-preview');frameHost.hidden=true;seekTime=el('span','native-preview-time');seekBubble.appendChild(frameHost);seekBubble.appendChild(seekTime);seekFrames=WePlaySeekPreview.create(seekBubble,frameHost);track.appendChild(bufferFill);track.appendChild(timeline);track.appendChild(seekKnob);seekBar.appendChild(track);seekBar.appendChild(seekBubble);bottom.appendChild(seekBar);
     var seekRow=el('div','native-time-row');elapsed=el('span','native-time','00:00');remaining=el('span','native-time native-total-time','—');finishLabel=el('span','native-remaining');seekRow.appendChild(elapsed);seekRow.appendChild(remaining);seekRow.appendChild(finishLabel);bottom.appendChild(seekRow);
     seekBar.addEventListener('mousedown',function(event){if(event.button!==0||totalTime<=0||failed)return;event.preventDefault();beginSeek(0,false);function move(e){if(!preview)return;var r=seekBar.getBoundingClientRect();preview.target=clamp((e.clientX-r.left)/r.width*totalTime);tick(currentTime);}function up(e){move(e);if(pointerCleanup)pointerCleanup();if(preview)finishSeek(true);}pointerCleanup=function(){document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);pointerCleanup=null;};document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);move(event);});
     var actions=el('div','native-actions'),audioGroup=el('div','native-audio-group'),transport=el('div','native-transport');audioButton=control('native-audio','Озвучка','speaker-high','',chooseAudio);audioGroup.appendChild(audioButton);actions.appendChild(audioGroup);
@@ -517,7 +527,7 @@
   window.WePlayNativePlayer={
     parse:parse,
     get active(){return active;},
-    snapshot:function(){return {active:active,sourceId:streamInfo&&streamInfo.versionId||options&&options.sourceId,audioLoading:audioLoading,engine:hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:options&&options.resolveEpisode?audioIndex:hls?hls.audioTrack:audioIndex,audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack,postplay:postplay&&postplay.snapshot()};},
+    snapshot:function(){return {active:active,sourceId:streamInfo&&streamInfo.versionId||options&&options.sourceId,audioLoading:audioLoading,engine:hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:options&&options.resolveEpisode?audioIndex:hls?hls.audioTrack:audioIndex,audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekPreview:seekFrames&&seekFrames.snapshot(),seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack,postplay:postplay&&postplay.snapshot()};},
     start:function(html,opts){
       this.close();options=opts;postplayDismissals={};episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
       episodeIndex=opts.resume?WePlaySeasons.resumeIndex(episodes,opts.resume):opts.startSeason===undefined||opts.startSeason===null?0:WePlaySeasons.startIndex(episodes,opts.startSeason);
@@ -529,10 +539,10 @@
     pauseForBackground:function(){
       if(!active)return;
       postplayAutoplay=false;remoteSeekKey=0;
-      if(preview){preview=null;seekRun=0;if(pointerCleanup)pointerCleanup();if(seekBubble)seekBubble.hidden=true;}
+      if(preview){preview=null;seekRun=0;if(pointerCleanup)pointerCleanup();if(seekBubble)seekBubble.hidden=true;if(seekFrames)seekFrames.hide();}
       pause();if(postplay)postplay.update();
     },
-    suspendForExit:function(){var resume=active&&(preview?preview.playing:wantsPlay)&&!failed;preview=null;suspended=true;clearTimeout(timer);pauseEngine();saveProgress(true);updateControls();return resume;},
+    suspendForExit:function(){var resume=active&&(preview?preview.playing:wantsPlay)&&!failed;preview=null;if(seekBubble)seekBubble.hidden=true;if(seekFrames)seekFrames.hide();suspended=true;clearTimeout(timer);pauseEngine();saveProgress(true);updateControls();return resume;},
     restoreAfterExit:function(resume){suspended=false;if(resume&&!failed)play();else pause();updateControls();armHide();},
     releaseSeekKey:function(code,cancelled){
       if(!active||!remoteSeekKey||code!==remoteSeekKey)return false;

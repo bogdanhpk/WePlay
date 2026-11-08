@@ -23,8 +23,8 @@ function video(record,rows){record._video={publisher:'fixture',titleId:String(re
  const duplicates=e.variants.filter(v=>v.label==='Студия A');assert.equal(duplicates.length,2);assert.notEqual(duplicates[0].caption,duplicates[1].caption);assert.notEqual(duplicates[0].preferenceKey,duplicates[1].preferenceKey);
  const legacyIndex=e.variants.findIndex(v=>v.label==='Дубляж'),legacy=await resolved.resolveEpisode(e,legacyIndex);
  assert.equal(legacy.format,undefined,'legacy URLs retain automatic HLS/MP4 detection');assert.equal(legacy.audioTrack,1);assert.equal(legacy.versionId,third.id);assert.equal(legacy.transport,'');assert.ok(legacy.url.endsWith('master.m3u8'));
- replies.set('https://plapi.cdnvideohub.com/api/v1/player/sv/video/only-b',{sources:{hlsUrl:'https://fixture.invalid/b.m3u8'}});
- const b=await resolved.resolveEpisode(e,e.variants.findIndex(v=>v.label==='Студия B'));assert.equal(b.versionId,second.id);assert.equal(b.transport,'plain');assert.ok(updates>=2);
+ replies.set('https://plapi.cdnvideohub.com/api/v1/player/sv/video/only-b',{sources:{hlsUrl:'https://fixture.invalid/b.m3u8',mpegTinyUrl:'https://fixture.invalid/b-tiny.mp4'}});
+ const b=await resolved.resolveEpisode(e,e.variants.findIndex(v=>v.label==='Студия B'));assert.equal(b.versionId,second.id);assert.equal(b.transport,'plain');assert.equal(b.seekPreview.type,'video');assert.equal(b.seekPreview.url,'https://fixture.invalid/b-tiny.mp4');assert.ok(updates>=2);
  const seriesA=item('pub','Exact episode',true),seriesB=item('vc','Exact episode',true);
  video(seriesA,[{vkId:'a1',voiceStudio:'A1',season:1,episode:1},{vkId:'a2',voiceStudio:'A2',season:1,episode:2}]);
  video(seriesB,[{vkId:'b2',voiceStudio:'B2',season:1,episode:2},{vkId:'b3',voiceStudio:'B3',season:2,episode:1}]);catalog.remember(seriesA);catalog.remember(seriesB);

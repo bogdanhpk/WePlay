@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const root=path.resolve(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'../app')),c={URL};c.window=c;vm.createContext(c);vm.runInContext(fs.readFileSync(path.join(root,'seek-preview.js'),'utf8'),c);const preview=c.WePlaySeekPreview;
+const html='preview: {interval:5,width:160,height:90,spriteSize:100,rowSize:10,src:"https://fixture.invalid/thumb/${spriteNum}.webp?key=abc",firstNum:1,pad:2}';
+const parsed=preview.read(html),source=preview.source({src:'https://fixture.invalid/episode2/${spriteNum}.webp'},parsed);
+assert.equal(source.interval,5);let f=preview.frame(source,55);assert.equal(f.x,160);assert.equal(f.y,90);assert.equal(f.time,55);assert.ok(f.url.endsWith('/episode2/01.webp'));
+f=preview.frame(source,500);assert.ok(f.url.endsWith('/episode2/02.webp'));assert.equal(f.x,0);assert.equal(f.y,0);
+assert.equal(preview.frame(source,-1),null);assert.equal(preview.source({type:'video',url:'javascript:alert(1)'}),null);assert.equal(preview.source({src:'https://name:secret@fixture.invalid/a'}),null);
+assert.equal(preview.source({src:'/thumb/${spriteNum}.webp'},parsed,'https://fixture.invalid/path/master.m3u8').src,'https://fixture.invalid/thumb/${spriteNum}.webp');
+assert.equal(preview.source({width:0,height:999999,interval:-1},parsed).width,160);assert.equal(preview.read('preview: {src: runCode()}'),null);assert.equal(preview.frame(preview.source({src:'https://fixture.invalid/one.jpg'}),500),null);
+const context={URL,addEventListener(){},localStorage:{getItem:()=>null},document:{getElementById:()=>({addEventListener(){}})},WePlaySeekPreview:preview};context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(root,'native-player.js'),'utf8'),context);
+const movie=context.WePlayNativePlayer.parse(html+'; hls:"https://fixture.invalid/master.m3u8"');assert.equal(movie[0].seekPreview.interval,5);
+const serial=context.WePlayNativePlayer.parse(html+'; seasons:[{"season":1,"episodes":[{"episode":1,"hls":"https://fixture.invalid/a.m3u8","preview":{"src":"https://fixture.invalid/a/${spriteNum}.webp"}},{"episode":2,"hls":"https://fixture.invalid/b.m3u8","preview":{"src":"https://fixture.invalid/b/${spriteNum}.webp"}}]}]');assert.ok(serial[1].seekPreview.src.includes('/b/'));assert.equal(serial[1].seekPreview.width,160);
+console.log(JSON.stringify({result:'PASS',checks:['provider data parsed without execution','sprite cell and page boundaries','episode-specific images inherit layout','relative URLs and padded pages','unsafe URLs and invalid dimensions rejected']}));

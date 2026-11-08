@@ -334,7 +334,7 @@
         var row=variant._source,play=row.resolved;
         return Promise.resolve(play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:variant.label,audioNames:row.episode.audio&&row.episode.audio.names||[]}).then(function(stream){
           var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);
-          return Object.assign({},typeof stream==='string'?{url:stream}:stream,{transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
+          return Object.assign({},typeof stream==='string'?{url:stream}:stream,{seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
         });
       },
       loadSources:function(onUpdate){
@@ -377,7 +377,7 @@
     return next(0);
   }
   function videoSource(episode,variant){
-    var selected=episode.variants[variant]||episode.variants[0];return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(selected.vkId),true,'omit',12000,false,true).then(function(j){var src=j.sources||{},stream=src.hlsUrl||src.mpegHighUrl||src.mpegMediumUrl;if(!stream||!/^https:\/\//.test(stream))throw new Error('Видео пока недоступно. Попробуйте другую озвучку.');return {url:stream,format:src.hlsUrl?'hls':'mp4'};});
+    var selected=episode.variants[variant]||episode.variants[0];return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(selected.vkId),true,'omit',12000,false,true).then(function(j){var src=j.sources||{},stream=src.hlsUrl||src.mpegHighUrl||src.mpegMediumUrl;if(!stream||!/^https:\/\//.test(stream))throw new Error('Видео пока недоступно. Попробуйте другую озвучку.');var preview=src.mpegTinyUrl||src.mpegLowestUrl;return {url:stream,format:src.hlsUrl?'hls':'mp4',seekPreview:preview&&/^https:\/\//.test(preview)?{type:'video',url:preview}:null};});
   }
   function playerFrom(item,media){
     if(!item._video)return Promise.resolve().then(function(){return fetchData(playerURL(item),false,'omit',12000,false,media);}).then(function(html){return{payload:html};});
