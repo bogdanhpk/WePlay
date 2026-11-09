@@ -403,14 +403,15 @@
   function asset(item,role,priority){return resourceAsset(resourceFor(item,priority),role);}
   function titleCandidates(entry){
     function logos(data){return data?(data.titleLogoCandidates||[]).concat(data.titleLogos||[]):[];}
-    var domestic=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(entry.item)).map(function(record){return{url:record.titleLogo,language:'ru'};}):[],packaged=WePlayTMDB.indexed(entry.item);
-    return WePlayTMDB.rankTitleLogos(domestic.concat(logos(packaged),logos(entry.metadata)));
+    var domestic=window.WePlayRussianArtwork?WePlayRussianArtwork.find(identity(entry.item)).map(function(record){return{url:record.titleLogo,language:'ru'};}):[],packaged=WePlayTMDB.indexed(entry.item),imdb=entry.identity.ids.imdb||entry.metadata&&entry.metadata.imdbId||packaged&&packaged.imdbId;
+    var fallback=/^tt\d+$/.test(imdb||'')?[{url:'https://images.metahub.space/logo/medium/'+imdb+'/img',language:null}]:[];
+    return WePlayTMDB.rankTitleLogos(domestic.concat(logos(packaged),logos(entry.metadata),fallback));
   }
   function titleVisible(entry){
     if(document.hidden||WePlayNetwork.isPlayback())return false;
     var visible=false;if(entry.titleLogoBindings)entry.titleLogoBindings.forEach(function(listener){var heading=listener.heading;if(heading.isConnected&&!heading.closest('.slide-leaving'))visible=true;});return visible;
   }
-  function needsTitle(entry){return !entry.titleLogoChoice||WePlayTMDB.logoPriority(entry.titleLogoChoice.language)>0&&titleCandidates(entry).some(function(candidate){return candidate.language==='ru';});}
+  function needsTitle(entry){return !entry.titleLogoChoice||titleCandidates(entry).some(function(candidate){return WePlayTMDB.logoPriority(candidate.language)<WePlayTMDB.logoPriority(entry.titleLogoChoice.language);});}
   function stopTitleRetry(entry){clearTimeout(entry.titleLogoRetry);entry.titleLogoRetry=null;}
   function scheduleTitle(entry,immediate){
     stopTitleRetry(entry);if(!needsTitle(entry)||!titleVisible(entry))return;
@@ -428,11 +429,32 @@
       persist(entry.key,value);
     }).catch(function(){}).finally(function(){entry.titleMetadataTask=null;});return entry.titleMetadataTask;
   }
-  function selectTitle(entry,candidates){
+  function titleImageURLs(raw){
+    if(!/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)\//.test(raw))return[raw];
+    // Logos need PNG transparency; the landscape image path converts to JPEG.
+    var relay='https://wsrv.nl/?url='+encodeURIComponent(raw)+'&output=png';
+    return /Tizen/i.test(navigator.userAgent)?[relay,raw]:[raw,relay];
+  }
+  function tryTitle(entry,candidates){
     return candidates.reduce(function(previous,candidate){return previous.then(function(value){
       if(value)return value;
-      return loadImage(candidate.url,3,8000,function(){return titleVisible(entry);}).then(function(image){return image.width>=120&&image.height>=32&&image.width/image.height>=.55?{url:candidate.url,language:candidate.language,image:image.image}:null;},function(){return null;});
+      return firstImage(titleImageURLs(candidate.url),'title',false,{priority:3,timeout:8000,guard:function(){return titleVisible(entry);}}).then(function(image){return image&&image.width>=120&&image.height>=16&&image.width/image.height>=.55?{url:candidate.url,language:candidate.language,image:image.image}:null;},function(){return null;});
     });},Promise.resolve(null));
+  }
+  function russianTitle(entry,candidates){
+    if(entry.titleRussianTask)return entry.titleRussianTask;
+    entry.titleRussianTask=tryTitle(entry,candidates).finally(function(){entry.titleRussianTask=null;});return entry.titleRussianTask;
+  }
+  function selectTitle(entry,candidates){
+    var russian=candidates.filter(function(candidate){return candidate.language==='ru';}),fallback=candidates.filter(function(candidate){return candidate.language!=='ru';});
+    if(!russian.length)return tryTitle(entry,fallback);
+    if(!fallback.length)return russianTitle(entry,russian);
+    return new Promise(function(resolve){
+      var russianDone=false,fallbackDone=false,settled=false,choice=null,timer;
+      function finish(value){if(settled)return;settled=true;clearTimeout(timer);resolve(value);}
+      russianTitle(entry,russian).then(function(value){russianDone=true;if(value){publishTitle(entry,value);finish(value);}else if(fallbackDone)finish(choice);});
+      tryTitle(entry,fallback).then(function(value){fallbackDone=true;choice=value;if(russianDone)finish(value);else if(value)timer=setTimeout(function(){finish(value);},1200);});
+    });
   }
   function publishTitle(entry,choice){
     if(!choice)return entry.titleLogo||null;
@@ -444,9 +466,9 @@
   function upgradeTitle(entry,skip){
     if(!entry.titleLogoChoice||WePlayTMDB.logoPriority(entry.titleLogoChoice.language)===0)return Promise.resolve(entry.titleLogo);
     if(entry.titleLogoUpgrade)return entry.titleLogoUpgrade;
-    var russian=titleCandidates(entry).filter(function(candidate){return candidate.language==='ru'&&(!skip||skip.indexOf(candidate.url)<0);});
-    if(!russian.length)return Promise.resolve(entry.titleLogo);
-    entry.titleLogoUpgrade=selectTitle(entry,russian).then(function(choice){return publishTitle(entry,choice);}).finally(function(){entry.titleLogoUpgrade=null;});return entry.titleLogoUpgrade;
+    var preferred=titleCandidates(entry).filter(function(candidate){return WePlayTMDB.logoPriority(candidate.language)<WePlayTMDB.logoPriority(entry.titleLogoChoice.language)&&(!skip||skip.indexOf(candidate.url)<0);});
+    if(!preferred.length)return Promise.resolve(entry.titleLogo);
+    entry.titleLogoUpgrade=selectTitle(entry,preferred).then(function(choice){return publishTitle(entry,choice);}).finally(function(){entry.titleLogoUpgrade=null;});return entry.titleLogoUpgrade;
   }
   function titleTask(entry){
     if(entry.titleLogoTask)return entry.titleLogoTask;
@@ -455,7 +477,7 @@
     var initial=titleCandidates(entry),attempted=initial.map(function(candidate){return candidate.url;});
     entry.titleLogoTask=(entry.titleLogo?upgradeTitle(entry):selectTitle(entry,initial).then(function(choice){
       if(choice){publishTitle(entry,choice);entry.metadataTask.then(function(){return upgradeTitle(entry,attempted);}).catch(function(){});if(!Array.isArray(entry.metadata&&entry.metadata.titleLogoCandidates))refreshTitleMetadata(entry).then(function(){return upgradeTitle(entry);});return entry.titleLogo;}
-      return refreshTitleMetadata(entry).then(function(){var candidates=titleCandidates(entry).filter(function(candidate){return attempted.indexOf(candidate.url)<0;}),imdb=entry.identity.ids.imdb||entry.metadata&&entry.metadata.imdbId;if(/^tt\d+$/.test(imdb||''))candidates.push({url:'https://images.metahub.space/logo/medium/'+imdb+'/img',language:null});return selectTitle(entry,WePlayTMDB.rankTitleLogos(candidates));}).then(function(found){return publishTitle(entry,found);});
+      return refreshTitleMetadata(entry).then(function(){var candidates=titleCandidates(entry).filter(function(candidate){return attempted.indexOf(candidate.url)<0;});return selectTitle(entry,candidates);}).then(function(found){return publishTitle(entry,found);});
     })).catch(function(){return entry.titleLogo||null;}).then(function(original){
       entry.titleLogoTask=null;if(needsTitle(entry)){entry.titleLogoFailures=(entry.titleLogoFailures||0)+1;scheduleTitle(entry);}return original;
     });return entry.titleLogoTask;
@@ -472,7 +494,7 @@
   function attachTitle(heading,item){
     if(!heading.isConnected)return;
     var entry=resourceFor(item,true),label=heading.textContent||item.title,binding=bindTitle(entry,heading,function(original){
-      if(!original||heading.closest('.slide-leaving')||heading._weplayTitleCandidate===original)return;
+      if(!original||heading.closest('.slide-leaving')||heading._weplayTitleCandidate===original&&heading.querySelector('.media-title-logo'))return;
       heading._weplayTitleCandidate=original;
       var image=original.isConnected?new Image():original;image.alt=label;image.className='media-title-logo';image.draggable=false;
       function show(){if(!heading.isConnected||heading._weplayTitleCleanup!==binding.cleanup||heading._weplayTitleCandidate!==original||heading.closest('.slide-leaving'))return;heading.textContent='';heading.appendChild(image);heading.classList.add('has-title-logo');}
@@ -495,7 +517,7 @@
     else if(entry.titleLogoTask)entry.titleLogoTask.then(function(original){binding.show(entry.titleLogo||original);},function(){});
     return binding.cleanup;
   }
-  function resumeTitles(){resources.forEach(function(entry){if(WePlayNetwork.isPlayback()||document.hidden)stopTitleRetry(entry);else scheduleTitle(entry,true);});}
+  function resumeTitles(){resources.forEach(function(entry){if(WePlayNetwork.isPlayback()||document.hidden)stopTitleRetry(entry);else{if(entry.titleLogo&&entry.titleLogoBindings)entry.titleLogoBindings.forEach(function(show){show(entry.titleLogo);});scheduleTitle(entry,true);}});}
   window.addEventListener('weplay:playback',resumeTitles);window.addEventListener('online',resumeTitles);document.addEventListener('visibilitychange',resumeTitles);
   function resolveResource(item,options){var entry=resourceFor(item,true);if(!options||!options.actors)return entry.ready;return resourceActors(entry).then(function(){return entry;});}
   function resourceActors(entry){

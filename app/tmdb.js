@@ -12,7 +12,7 @@
 
   function image(path,size){return /^\/[a-zA-Z0-9]+\.(?:jpg|png|webp)$/.test(path||'')?'https://image.tmdb.org/t/p/'+size+path:'';}
   function logoLanguage(value){return String(value||'').toLowerCase().replace('_','-').split('-')[0]||null;}
-  function logoPriority(language){language=logoLanguage(language);return language==='ru'?0:!language?1:language==='en'?2:3;}
+  function logoPriority(language){language=logoLanguage(language);return language==='ru'?0:language==='en'?1:!language?2:3;}
   function rankTitleLogos(values){
     var byURL=Object.create(null),ordered=[];
     (values||[]).forEach(function(value){
