@@ -373,7 +373,7 @@
     });return row;
   }
   function catalog(g) {
-    var route=current,isReleases=route.kind==='releases';header(route.title||'Каталог',isReleases?'Премьеры '+WePlayCatalog.releaseYear()+' года':null);
+    var route=current,isReleases=route.kind==='releases';header(route.title||'Каталог',isReleases?WePlayCatalog.releasePeriod(route.category):null);
     if(isReleases){var sections=WePlayCatalog.releaseSections(),tabs=element('div','library-toolbar release-tabs');route.category=route.category||sections[0].id;route.catalogs=route.catalogs||{};route.data=route.catalogs[route.category]||(route.catalogs[route.category]={items:[],page:0,total:0,more:true,filters:{}});tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Раздел новинок');sections.forEach(function(spec){var selected=route.category===spec.id,b=button(spec.label,'library-tab'+(selected?' selected':''),function(){if(route.category===spec.id)return;route.category=spec.id;navigate(route);},'releases-tab-'+spec.id);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(selected));b.setAttribute('aria-controls','releases-results');tabs.appendChild(b);});content.appendChild(tabs);}
     if(!route.data)route.data={items:[],page:0,total:0,more:true,filters:{}};
     var state=route.data, filters=element('div'),results=element('div'),footer=element('div','load-more'),pending=false;if(isReleases){results.id='releases-results';results.setAttribute('role','tabpanel');results.setAttribute('aria-labelledby','releases-tab-'+route.category);}
@@ -384,7 +384,7 @@
       var found=state.items.filter(function(i){return Object.keys(state.filters).every(function(k){var v=state.filters[k];if(!v)return true;
         if(k==='rating')return (score(i,'kp_rating')||score(i,'imdb_rating')||0)>=Number(v);
         return xf(i,k).toLowerCase().indexOf(v.toLowerCase())>=0;});});
-      results.appendChild(found.length?gridOf(found,null,reuse):emptyBox(isReleases?'Премьеры '+WePlayCatalog.releaseYear()+' года пока не найдены. Смените фильтры или загрузите ещё.':'Смените фильтры или загрузите ещё фильмы.'));
+      results.appendChild(found.length?gridOf(found,null,reuse):emptyBox(isReleases?WePlayCatalog.releasePeriod(route.category)+' пока не найдены. Смените фильтры или загрузите ещё.':'Смените фильтры или загрузите ещё фильмы.'));
       footer.innerHTML='';footer.appendChild(element('p','count','Загружено '+state.items.length+(typeof state.total==='number'?' из '+state.total:'')));
       if(state.more)footer.appendChild(button('Загрузить ещё','secondary',loadMore,'load-more'));
       if(activeId)focus(document.getElementById(activeId));

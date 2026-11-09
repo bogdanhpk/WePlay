@@ -2,13 +2,14 @@
 (function(){
   'use strict';
   var catalog=window.WePlayCatalog,baseApi=catalog.api,feeds={},revision=0;
-  var definitions=[{id:'new-films',title:'Новые фильмы',label:'Фильмы',category:106,kind:'movie'},{id:'new-series',title:'Новые сериалы',label:'Сериалы',category:13,kind:'series'},{id:'new-cartoons',title:'Новые мультфильмы',label:'Мультфильмы',category:109,kind:'movie'}];
-  var store={},STORE='lord.releases.v1';try{store=JSON.parse(localStorage.getItem(STORE)||'{}')||{};}catch(ignore){}
+  var definitions=[{id:'new-films',title:'Новые фильмы',label:'Фильмы',category:106,kind:'movie'},{id:'new-series',title:'Новые сериалы',label:'Сериалы',category:13,kind:'series'},{id:'new-cartoons',title:'Новые мультфильмы',label:'Мультфильмы',category:109,kind:'movie',years:2}];
+  var store={},STORE='lord.releases.v2';try{store=JSON.parse(localStorage.getItem(STORE)||'{}')||{};}catch(ignore){}
   function year(){return new Date().getFullYear();}
   function definition(id){return definitions.filter(function(value){return value.id===id;})[0];}
   function save(key,data){store[key]={at:Date.now(),data:data};var keys=Object.keys(store).sort(function(a,b){return store[a].at-store[b].at;});function evict(){var at=keys.findIndex(function(k){return k.indexOf('|18|1|')<0;});delete store[keys.splice(at<0?0:at,1)[0]];}while(keys.length>18)evict();try{var value=JSON.stringify(store);while(value.length>350000&&keys.length>1){evict();value=JSON.stringify(store);}localStorage.setItem(STORE,value);}catch(ignore){}}
   function itemsOf(j){var d=j&&j.data||{};return Array.isArray(d)?d:d.items||d.news||d.list||[];}
-  function eligible(item,spec,releaseYear){var fields=WePlayCatalogUnion.fields(item),match=String(fields.year||'').match(/(?:19|20)\d{2}/),kind=WePlayCatalogUnion.kind(item);return match&&Number(match[0])===releaseYear&&(!kind||kind===spec.kind);}
+  function eligible(item,spec,releaseYear){var fields=WePlayCatalogUnion.fields(item),match=String(fields.year||'').match(/(?:19|20)\d{2}/),kind=WePlayCatalogUnion.kind(item);return match&&Number(match[0])>=releaseYear-(spec.years||1)+1&&Number(match[0])<=releaseYear&&(!kind||kind===spec.kind);}
+  function period(id){var last=year(),spec=definition(id),first=last-(spec&&spec.years||1)+1;return 'Премьеры '+(first===last?last+' года':first+'–'+last+' годов');}
   function restore(j){var data=Object.assign({},j.data);data.items=catalog.dedupe(itemsOf(j));data.items.forEach(catalog.remember);return Object.assign({},j,{data:data});}
   function recent(params,spec){
     var releaseYear=year(),mode=catalog.snapshot().mode,limit=Math.max(1,Math.min(120,Number(params.limit)||60)),page=Math.max(1,Number(params.page)||1),query=String(params.search||'');
@@ -39,5 +40,6 @@
   catalog.api=function(params,preview){var spec=definition(params.category);return spec&&params.do!=='get'?recent(params,spec):baseApi(params,preview);};
   catalog.releaseSections=function(){return definitions.map(function(value){return Object.assign({},value);});};
   catalog.releaseYear=year;
+  catalog.releasePeriod=period;
   catalog.isReleaseCategory=function(id){return !!definition(id);};
 }());
