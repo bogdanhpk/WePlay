@@ -169,13 +169,13 @@
     posterChecks[raw]=WePlayNetwork.request(raw,{method:'HEAD',credentials:'omit'},{timeout:1000,read:function(response){return !!response.url&&!placeholder(response.url);}}).catch(function(){return false;}).then(function(valid){if(!valid)delete posterChecks[raw];return valid;});return posterChecks[raw];
   }
 
-  function loadImage(url,priority,timeout,guard){
+  function loadImage(url,priority,timeout,guard,crossOrigin){
     var retained=decoded.filter(function(entry){return entry.url===url;})[0];if(retained){decoded.splice(decoded.indexOf(retained),1);decoded.push(retained);return Promise.resolve(retained);}
     if(imagePending[url])return imagePending[url];
     imagePending[url]=new Promise(function(resolve,reject){imageQueue.push({resolve:resolve,reject:reject,priority:Number(priority)||0,order:imageOrder++,run:function(){return WePlayNetwork.run(function(signal){if(guard&&!guard())return Promise.reject(new Error('Image temporarily unavailable'));return new Promise(function(done,fail){var image=new Image(),finished=false,timer=setTimeout(function(){finish(false);},timeout||8000);
       function finish(ok){if(finished)return;finished=true;clearTimeout(timer);signal.removeEventListener('abort',cancel);image.onload=null;image.onerror=null;if(!ok){image.removeAttribute('src');fail(new Error('Image unavailable'));return;}var value={url:url,width:image.naturalWidth,height:image.naturalHeight,image:image};decoded.push(value);while(decoded.length>8)decoded.shift();done(value);}
       function cancel(){finish(false);}signal.addEventListener('abort',cancel);
-      image.onload=function(){validPoster(url,image).then(function(valid){if(!valid){finish(false);return;}if(image.decode)image.decode().then(function(){finish(true);},function(){finish(!!image.naturalWidth);});else finish(true);},function(){finish(false);});};image.onerror=function(){finish(false);};image.src=url;
+      image.onload=function(){validPoster(url,image).then(function(valid){if(!valid){finish(false);return;}if(image.decode)image.decode().then(function(){finish(true);},function(){finish(!!image.naturalWidth);});else finish(true);},function(){finish(false);});};image.onerror=function(){finish(false);};if(crossOrigin)image.crossOrigin='anonymous';image.src=url;
     });});}});imageQueue.sort(function(a,b){return b.priority-a.priority||a.order-b.order;});pumpImages();}).finally(function(){delete imagePending[url];});
     return imagePending[url];
   }
@@ -431,14 +431,37 @@
   }
   function titleImageURLs(raw){
     if(!/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)\//.test(raw))return[raw];
-    // Logos need PNG transparency; the landscape image path converts to JPEG.
-    var relay='https://wsrv.nl/?url='+encodeURIComponent(raw)+'&output=png';
-    return /Tizen/i.test(navigator.userAgent)?[relay,raw]:[raw,relay];
+    // The PNG relay preserves alpha and lets the logo be normalized locally.
+    var relay='https://wsrv.nl/?url='+encodeURIComponent(raw)+'&output=png&w=960&h=512&fit=inside&we';
+    return[relay,raw];
+  }
+  function normalizeTitle(frame){
+    if(frame.titleFrame)return frame.titleFrame;
+    if(frame.width*frame.height>1048576)return Promise.resolve(frame);
+    frame.titleFrame=WePlayNetwork.run(function(){return new Promise(function(resolve){
+      var canvas=document.createElement('canvas'),context,output;
+      try{
+        canvas.width=frame.width;canvas.height=frame.height;context=canvas.getContext('2d');context.drawImage(frame.image,0,0);
+        var pixels=context.getImageData(0,0,frame.width,frame.height).data,left=frame.width,top=frame.height,right=-1,bottom=-1;
+        // Ignore export noise below 3% opacity; keep dark artwork and outlines.
+        for(var y=0;y<frame.height;y++)for(var x=0;x<frame.width;x++)if(pixels[(y*frame.width+x)*4+3]>=8){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+        var width=right-left+1,height=bottom-top+1;
+        if(right<left||bottom<top){canvas.width=canvas.height=0;resolve(null);return;}
+        if(width<120||height<16||width===frame.width&&height===frame.height){canvas.width=canvas.height=0;resolve(frame);return;}
+        output=document.createElement('canvas');output.width=width;output.height=height;output.getContext('2d').drawImage(frame.image,left,top,width,height,0,0,width,height);
+        var image=new Image(),data=output.toDataURL('image/png'),finished=false;canvas.width=canvas.height=output.width=output.height=0;
+        function finish(ok){if(finished)return;finished=true;clearTimeout(timer);image.onload=image.onerror=null;resolve(ok?{url:frame.url,width:width,height:height,image:image}:frame);}
+        var timer=setTimeout(function(){finish(image.complete&&image.naturalWidth>0);},1500);
+        image.onload=function(){finish(true);};image.onerror=function(){finish(false);};image.src=data;if(image.complete&&image.naturalWidth)finish(true);
+      }catch(ignore){canvas.width=canvas.height=0;if(output)output.width=output.height=0;resolve(frame);}
+    });});return frame.titleFrame;
   }
   function tryTitle(entry,candidates){
     return candidates.reduce(function(previous,candidate){return previous.then(function(value){
       if(value)return value;
-      return firstImage(titleImageURLs(candidate.url),'title',false,{priority:3,timeout:8000,guard:function(){return titleVisible(entry);}}).then(function(image){return image&&image.width>=120&&image.height>=16&&image.width/image.height>=.55?{url:candidate.url,language:candidate.language,image:image.image}:null;},function(){return null;});
+      var urls=titleImageURLs(candidate.url),at=0,uncrossed=false;
+      function next(){var url,cors;if(at<urls.length){url=urls[at++];cors=/^https:\/\/(?:wsrv\.nl|image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)\//.test(url);}else if(!uncrossed&&urls.length>1){uncrossed=true;url=candidate.url;cors=false;}else return Promise.resolve(null);return loadImage(url,3,8000,function(){return titleVisible(entry);},cors).then(function(image){return image.width>=120&&image.height>=16&&image.width/image.height>=.55?normalizeTitle(image).then(function(normalized){return normalized?{url:candidate.url,language:candidate.language,image:normalized.image}:next();}):next();},next);}
+      return next();
     });},Promise.resolve(null));
   }
   function russianTitle(entry,candidates){
@@ -459,7 +482,7 @@
   function publishTitle(entry,choice){
     if(!choice)return entry.titleLogo||null;
     if(entry.titleLogoChoice&&WePlayTMDB.logoPriority(choice.language)>=WePlayTMDB.logoPriority(entry.titleLogoChoice.language))return entry.titleLogo;
-    entry.titleLogoChoice=choice;entry.titleLogo=choice.image;entry.titleLogoFailures=0;stopTitleRetry(entry);
+    entry.titleLogoChoice=choice;entry.titleLogo=choice.image;entry.titleLogo.setAttribute('data-logo-source',choice.url);entry.titleLogoFailures=0;stopTitleRetry(entry);
     if(entry.titleLogoBindings)entry.titleLogoBindings.forEach(function(show){show(entry.titleLogo);});
     return entry.titleLogo;
   }
@@ -496,7 +519,7 @@
     var entry=resourceFor(item,true),label=heading.textContent||item.title,binding=bindTitle(entry,heading,function(original){
       if(!original||heading.closest('.slide-leaving')||heading._weplayTitleCandidate===original&&heading.querySelector('.media-title-logo'))return;
       heading._weplayTitleCandidate=original;
-      var image=original.isConnected?new Image():original;image.alt=label;image.className='media-title-logo';image.draggable=false;
+      var image=original.isConnected?new Image():original;image.alt=label;image.className='media-title-logo';image.draggable=false;image.setAttribute('data-logo-source',original.getAttribute('data-logo-source')||original.currentSrc||original.src);
       function show(){if(!heading.isConnected||heading._weplayTitleCleanup!==binding.cleanup||heading._weplayTitleCandidate!==original||heading.closest('.slide-leaving'))return;heading.textContent='';heading.appendChild(image);heading.classList.add('has-title-logo');}
       image.onerror=function(){if(heading._weplayTitleCandidate===original)delete heading._weplayTitleCandidate;if(!original.isConnected){image=original;show();}};
       if(image===original)show();else{image.onload=show;image.src=original.currentSrc||original.src;if(image.complete&&image.naturalWidth)show();}
