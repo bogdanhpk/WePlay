@@ -37,11 +37,11 @@
   }
   function remember(item){if(item&&item.id){
     var expanded=String(item.id).match(/^lat-kp-([1-9]\d{0,11})$/),x=union.fields(item);
-    if(expanded&&String(x.kinopoisk_id)===expanded[1])item=Object.assign({},item,{_source:'lat',_expanded:true,_detail:true,_video:{publisher:source('lat').searchPublisher,titleId:expanded[1],aggregator:'kp'},xfields:Object.assign({},x,{film:'https://plapi.cdnvideohub.com/api/v1/player/sv/playlist'})});
-    if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives)item._alternatives.forEach(remember);else {
+    if(expanded&&(!x.kinopoisk_id||String(x.kinopoisk_id)===expanded[1]))item=Object.assign({},item,{_source:'lat',_expanded:true,_detail:true,_video:{publisher:source('lat').searchPublisher,titleId:expanded[1],aggregator:'kp'},xfields:Object.assign({},x,{kinopoisk_id:expanded[1],film:'https://plapi.cdnvideohub.com/api/v1/player/sv/playlist'})});
+    if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives&&item._alternatives.length)item._alternatives.forEach(remember);else {
       // Continue-watching cards contain only display metadata. Keep the source locator
       // and loaded player data when such a card is rendered after a full catalog record.
-      var previous=index[String(item.id)];if(previous){var fields=Object.assign({},union.fields(previous));Object.keys(union.fields(item)).forEach(function(key){var value=union.fields(item)[key];if(value!==undefined&&value!==null&&value!=='')fields[key]=value;});item=Object.assign({},previous,item,{xfields:fields});}
+      item=union.mergeRecord(index[String(item.id)]||union.record(item.id),item);
       index[String(item.id)]=item;
     }if(item._categoryURL)paths[String(item.id)]=item._categoryURL;if(item.title)union.combine([item]);
   }}
@@ -124,7 +124,7 @@
   }
   function fact(doc,label){var value='';list(doc,'.flist li,.lfs-fact,.page__list li').some(function(row){var first=row.firstElementChild;if(first&&text(first).toLowerCase().indexOf(label.toLowerCase())===0){value=text(row).slice(text(first).length).replace(/^\s*:\s*/,'').trim();return true;}return false;});return value;}
   function detail(s,id,options){
-    var known=index[String(id)];if(known&&known._expanded)return Promise.resolve({success:true,data:known});
+    var known=index[String(id)]||union.record(id);if(known&&known._expanded)return Promise.resolve({success:true,data:known});
     // Older local history deliberately omitted playback URLs. Recover the public
     // catalog page from its stable source ID instead of treating it as unavailable.
     if(known&&!known._url){var match=String(id).match(new RegExp('^'+s.id+'-([1-9]\\d*)$'));if(match&&s.id!=='primary'){known=Object.assign({},known,{_url:new URL(s.layout==='media'?'/'+match[1]:'/index.php?newsid='+match[1],s.base).href});index[String(id)]=known;}}
@@ -201,8 +201,8 @@
     });
   }
   function rawDetail(item,verify,refresh,reload,media){
-    var record=index[String(item.id)]||item,s=source(record._source||'primary');
-    var loaded=record._detail&&!refresh?Promise.resolve(record):requestFrom(s,{action:'news',do:'get',id:record.id},true,!!refresh,reload||media?{reload:!!reload,media:!!media}:undefined).then(function(j){var d=j.data;return Array.isArray(d)?d[0]:d.item||d.news||d;});
+    remember(item);var record=index[String(item.id)]||union.record(item.id)||item,s=source(record._source||'primary');
+    var loaded=record._detail&&!refresh&&(union.fields(record).film||record._video)?Promise.resolve(record):requestFrom(s,{action:'news',do:'get',id:record.id},true,!!refresh,reload||media?{reload:!!reload,media:!!media}:undefined).then(function(j){var d=j.data;return Array.isArray(d)?d[0]:d.item||d.news||d;});
     return loaded.then(function(full){return verify||!union.kind(full)&&full._video?verifyKind(full,media):full;});
   }
   function playerURL(item){var raw=union.fields(item).film;if(!raw)throw new Error('Видео для этого фильма пока недоступно.');var u=new URL(raw),origin=source(item._source||'primary');u.searchParams.set('host',origin?new URL(origin.base).hostname:'lord.kim');return u.href;}

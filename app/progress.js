@@ -11,12 +11,17 @@
       return typeof image==='string'&&image.length<=500&&/^https?:\/\/[^/?#@\s]+\/[^?#\s]*\.(?:jpe?g|png|webp|avif)$/i.test(image);
     }).filter(function(image,index,all){return all.indexOf(image)===index;}).slice(0,3);
   }
-  function metadata(item){
-    var base=(item._alternatives||[]).filter(function(v){return String(v.id)===String(item.id);})[0]||item;
+  function metadata(item,previous){
+    var routes=WePlayCatalogUnion.locators(item);if(previous)WePlayCatalogUnion.locators(previous).forEach(function(row){if(!routes.some(function(route){return route.id===row.id;}))routes.push(row);});routes=routes.slice(0,20);
+    var base=routes.filter(function(v){return String(v.id)===String(item.id);})[0]||(item._alternatives||[]).filter(function(v){return String(v.id)===String(item.id);})[0]||item;
     var x=WePlayCatalogUnion.fields(item),out={id:String(item.id),title:String(item.title||'').slice(0,300),_source:base._source||'primary',_kind:WePlayCatalogUnion.kind(item),xfields:{}};
     ['year','original_title','janre','kinopoisk_id','kp_id','kinopoisk_url','imdb_id','imdb_url','tmdb_id','image','download_poster','poster','poster_url','thumbnail','thumb'].forEach(function(key){if(typeof x[key]==='string'||typeof x[key]==='number')out.xfields[key]=String(x[key]).slice(0,2000);});
     var frames=[];backdropFields.forEach(function(key){frames=frames.concat(backdrops(x[key]||item[key]));});
     frames=backdrops(frames);if(frames.length)out.xfields.backdrops=frames;
+    var publicRoute=routes.filter(function(row){return row.id===out.id;})[0];if(publicRoute&&publicRoute._url)out._url=publicRoute._url;
+    // Keep public catalog locators for every source, without signed media URLs or
+    // player responses. A cold start can resolve fresh playback from any of them.
+    if(routes.length>1)out._alternatives=routes.map(function(row){return row.id===out.id?Object.assign({},out,row,{xfields:Object.assign({},out.xfields,row.xfields)}):row;});
     return out;
   }
   function valid(record){return record&&record.item&&typeof record.item.id==='string'&&record.item.id&&typeof record.item.title==='string'&&finite(record.position,86400000)&&finite(record.duration,86400000)&&finite(record.updatedAt,1e15)&&(!record.pending||number(record.season,500)&&number(record.episode,10000));}
@@ -39,7 +44,7 @@
     if(!item||!item.id||!sample||!finite(sample.position,86400000)||!finite(sample.duration,86400000)||sample.position<1000&&!sample.ended)return null;
     var duration=sample.duration,position=duration?Math.min(sample.position,duration):sample.position,ended=!!sample.ended||duration>0&&position/duration>=.95&&duration-position<=120000;
     var next=ended&&sample.next&&number(sample.next.season,500)&&number(sample.next.episode,10000),previous=get(item);
-    var record={item:metadata(item),aliases:[String(item.id)].concat((item._alternatives||[]).map(function(v){return String(v.id);})),position:next?0:Math.round(position),duration:next?0:Math.round(duration),season:next?Number(sample.next.season):number(sample.season,500),episode:next?Number(sample.next.episode):number(sample.episode,10000),pending:!!next,completed:ended&&!next,sourceId:String(sample.sourceId||''),updatedAt:Math.max(Date.now(),records.length?records[0].updatedAt+1:0)};
+    var record={item:metadata(item,previous&&previous.item),aliases:[String(item.id)].concat((item._alternatives||[]).map(function(v){return String(v.id);})),position:next?0:Math.round(position),duration:next?0:Math.round(duration),season:next?Number(sample.next.season):number(sample.season,500),episode:next?Number(sample.next.episode):number(sample.episode,10000),pending:!!next,completed:ended&&!next,sourceId:String(sample.sourceId||''),updatedAt:Math.max(Date.now(),records.length?records[0].updatedAt+1:0)};
     if(previous){
       record.aliases=record.aliases.concat(previous.aliases||[]);
       if(WePlayCatalogUnion.same(previous.item,item)){

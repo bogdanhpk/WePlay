@@ -27,13 +27,41 @@
   function tokens(item){var out=[],external=ids(item),y=year(item);Object.keys(external).forEach(function(k){out.push(k+':'+external[k]);});if(y)names(item).forEach(function(n){out.push('name:'+y+':'+n);});return out;}
   function root(group){while(group&&group.parent)group=group.parent;return group;}
   function raw(item){var copy=Object.assign({},item);delete copy._alternatives;delete copy._group;delete copy._displayId;copy.xfields=Object.assign({},fields(item));return copy;}
+  function sourceId(item){var id=String(item&&item.id||''),match=id.match(/^(sb|pub|lat|vc|st)-/);return match?match[1]:/^[1-9]\d*$/.test(id)?'primary':item&&item._source||'';}
+  function mergeRecord(previous,item){
+    previous=previous||{};var next=raw(Object.assign({},previous,item)),x=Object.assign({},fields(previous)),incoming=fields(item);
+    Object.keys(incoming).forEach(function(key){var value=incoming[key];if(value!==''&&value!==null&&value!==undefined)x[key]=value;});next.xfields=x;
+    ['title','_url','_video'].forEach(function(key){if(!item[key]&&previous[key])next[key]=previous[key];});
+    if(previous._detail)next._detail=true;if(previous._expanded)next._expanded=true;var origin=sourceId(next);if(origin)next._source=origin;return next;
+  }
+  function record(id){var group=root(aliases[String(id)]),found=group&&group.variants.filter(function(v){return String(v.id)===String(id);})[0];return found?raw(found):null;}
+  function publicPage(item){
+    var origin=sourceId(item),id=String(item.id).match(/^(?:sb|pub|lat|vc|st)-([1-9]\d*)$/),hosts={primary:/^lord\.kim$/,sb:/^(?:sb|sn|so)\.lordfilm5\.pro$/,pub:/^lordfilms\.pub$/,lat:/^lordfilm26-kino\d+\.lat$/,vc:/^lordfilm\.vc$/,st:/^lordfilm\.st$/};
+    if(!id||!hosts[origin]||!item._url)return'';
+    try{var u=new URL(item._url);if(u.protocol!=='https:'||u.username||u.password||u.port||!hosts[origin].test(u.hostname))return'';
+      if(origin==='lat'){if(u.pathname!=='/'+id[1]&&u.pathname!=='/'+id[1]+'/')return'';u.search='';}
+      else if(new RegExp('^/'+id[1]+'-[^/]+\\.html$').test(u.pathname))u.search='';
+      else if(u.pathname==='/index.php'&&u.searchParams.get('newsid')===id[1])u.search='?newsid='+id[1];else return'';
+      u.hash='';return u.href;
+    }catch(ignore){return'';}
+  }
+  function locators(item){
+    var group=item&&root(aliases[String(item.id)]),rows=group?group.variants.slice():[],candidates=item&&item._alternatives&&item._alternatives.length?item._alternatives:[item],seen={};
+    candidates.forEach(function(row){if(!row)return;var bound=root(aliases[String(row.id)]);if(group&&(bound&&bound!==group||!bound&&!groupMatches(group,row)))return;
+      var at=rows.findIndex(function(v){return String(v.id)===String(row.id);});if(at>=0)rows[at]=mergeRecord(row,rows[at]);else rows.push(row);
+    });
+    return rows.filter(function(row){var id=String(row&&row.id||'');if(!/^(?:[1-9]\d*|(?:sb|pub|lat|vc|st)-[1-9]\d*|lat-kp-[1-9]\d{0,11})$/.test(id)||seen[id])return false;seen[id]=true;return true;}).slice(0,20).map(function(row){
+      var x=fields(row),out={id:String(row.id),title:String(row.title||item.title||'').slice(0,300),_source:sourceId(row),_kind:kind(row),xfields:{}};
+      ['year','original_title','janre','kinopoisk_id','kp_id','kinopoisk_url','imdb_id','imdb_url','tmdb_id'].forEach(function(key){if(typeof x[key]==='string'||typeof x[key]==='number')out.xfields[key]=String(x[key]).slice(0,2000);});var page=publicPage(row);if(page)out._url=page;return out;
+    });
+  }
   function idConflict(a,b){a=ids(a);b=ids(b);return Object.keys(a).some(function(k){return b[k]&&a[k]!==b[k];});}
   function compatible(group,item){return !group.variants.some(function(v){return idConflict(v,item)||kind(v)&&kind(item)&&kind(v)!==kind(item);});}
   function groupMatches(group,item){return group.variants.some(function(v){return same(v,item);})&&compatible(group,item);}
   function attach(group,item){
     var id=String(item.id),at=group.variants.findIndex(function(v){return String(v.id)===id;});
-    if(at>=0){var previous=group.variants[at],next=raw(Object.assign({},previous,item));next.xfields=Object.assign({},fields(previous));Object.keys(fields(item)).forEach(function(k){if(fields(item)[k]!==''&&fields(item)[k]!==null&&fields(item)[k]!==undefined)next.xfields[k]=fields(item)[k];});group.variants[at]=next;}
-    else group.variants.push(raw(item));
+    if(at>=0)group.variants[at]=mergeRecord(group.variants[at],item);
+    else group.variants.push(mergeRecord(null,item));
     aliases[id]=group;tokens(group.variants[at>=0?at:group.variants.length-1]).forEach(function(k){var bucket=buckets[k]||(buckets[k]=[]);if(bucket.indexOf(group)<0)bucket.push(group);});
   }
   function addOne(item){
@@ -59,5 +87,5 @@
   function combine(items){var groups=[];(items||[]).forEach(function(item){var records=item&&item._alternatives&&item._alternatives.length?item._alternatives:[item];records.forEach(function(record){var g=addOne(record);if(g)groups.push(g);});});var seen=[];return groups.map(root).filter(function(g){if(seen.indexOf(g)>=0)return false;seen.push(g);return true;}).map(view);}
   function unresolved(items){var out=[],seen={};function collect(v){if(!v._kindVerified&&!seen[String(v.id)]){seen[String(v.id)]=true;out.push(raw(v));}}
     (items||[]).forEach(function(item){var group=root(aliases[String(item.id)]),records=group?group.variants:[item];records.forEach(function(v){var y=year(v),n=names(v);if(!y)return;tokens(v).filter(function(k){return k.indexOf('name:')===0;}).forEach(function(k){(buckets[k]||[]).forEach(function(g){g=root(g);g.variants.forEach(function(other){if(String(other.id)===String(v.id)||idConflict(other,v)||year(other)!==y||!names(other).some(function(name){return n.indexOf(name)>=0;}))return;if(!kind(v)||!kind(other)||kind(v)!==kind(other)){collect(v);collect(other);}});});});});});return out;}
-  window.WePlayCatalogUnion={combine:combine,unresolved:unresolved,find:find,same:same,normal:normal,kind:kind,fields:fields,identifiers:ids,variants:function(item){var found=item&&find(item.id);return found?found._alternatives:item&&item._alternatives?item._alternatives:item?[raw(item)]:[];},canonical:function(id){var g=root(aliases[String(id)]);return g?String(g.id):String(id);}};
+  window.WePlayCatalogUnion={combine:combine,unresolved:unresolved,find:find,record:record,mergeRecord:mergeRecord,locators:locators,same:same,normal:normal,kind:kind,fields:fields,identifiers:ids,variants:function(item){var found=item&&find(item.id);return found?found._alternatives:item&&item._alternatives?item._alternatives:item?[raw(item)]:[];},canonical:function(id){var g=root(aliases[String(id)]);return g?String(g.id):String(id);}};
 }());
