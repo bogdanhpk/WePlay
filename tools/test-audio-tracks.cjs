@@ -1,0 +1,21 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),assert=require('node:assert/strict'),c={window:{}};
+vm.runInNewContext(fs.readFileSync(path.join(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'../app'),'audio-tracks.js'),'utf8'),c);const audio=c.window.WePlayAudio,voice=(label,voiceType='',language='')=>({label,voiceType,language}),id=t=>audio.describe(t,'scope').key;
+assert.equal(id(voice('Lost Film [MVO]')),id(voice('Лостфильм','Многоголосый')));
+assert.equal(id(voice('HD Rezka Studio (18+) [MVO]')),id(voice('HDrezka Studio 18+','Многоголосый')));
+assert.notEqual(id(voice('HDrezka Studio 18+','Многоголосый')),id(voice('HDrezka Studio','Многоголосый')));
+assert.notEqual(id(voice('RedHeadSound','Дубляж')),id(voice('RedHeadSound','Многоголосый')));
+assert.equal(id(voice('RedHeadSound · Дубляж')),id(voice('RedHeadSound','Дубляж')));
+assert.equal(id(voice('Оригинал · Английский')),id(voice('Eng.Original')));
+assert.equal(id(voice('@MUZOBOZ@')),id(voice('Muzoboz')));
+assert.notEqual(id(voice('Netflix','Дубляж','ru')),id(voice('Netflix','Дубляж','en')));
+assert.equal(id(voice('Netflix','Дубляж','en-US')),id(voice('Netflix','Дубляж','eng')));
+assert.notEqual(id(voice('LostFilm (тифлокомментарий)')),id(voice('LostFilm')));
+assert.equal(id(voice('Михаил Яроцкий','Авторская')),id(voice('Яроцкий Михаил | Kyberpunk','Авторская')));
+assert.equal(id(voice('Дублированный')),id(voice('Дубляж')));
+const unique=audio.unique([{label:'Lost Film',index:0},{label:'LostFilm',index:1}],1);assert.equal(unique.length,1);assert.equal(unique[0].index,1);assert.equal(unique[0].label,'LostFilm');
+const unknowns=audio.unique([{label:'Основная',index:0},{label:'Основная',index:1}],0);assert.equal(unknowns.length,2);assert.notEqual(unknowns[0].label,unknowns[1].label);
+function row(track,n){const info=audio.describe(track,'route'+n);return{label:info.label,voiceKey:info.key,preferenceKey:'voice:'+info.key,_preferenceKeys:['old:'+n],_audio:info,sources:['Источник '+n],_sources:[{streamKey:'route'+n}]};}
+const a=row(voice('LostFilm'),1),b=row(voice('Lost Film','Многоголосый'),2),oldKey=a.preferenceKey;audio.mergeUnknown([a,b]);assert.equal(audio.root(b),a);assert.equal(a._sources.length,2);assert.equal(a._audio.type,'mvo');assert.equal(audio.preferredIndex([a,b],'',oldKey),0);assert.equal(audio.preferenceKey([a,b],oldKey),a.preferenceKey);
+const rhs=[row(voice('RedHeadSound'),1),row(voice('RedHeadSound','Дубляж'),2),row(voice('RedHeadSound','Многоголосый'),3)];audio.mergeUnknown(rhs);assert.equal(rhs.filter(r=>!r._duplicateOf).length,3);assert.equal(new Set(rhs.map(r=>r.label)).size,3);assert.equal(audio.preferredIndex(rhs,'RedHeadSound',''),0);
+console.log(JSON.stringify({result:'PASS',checks:['studio aliases and format labels deduplicate','dub/MVO, languages, AD and 18+ remain distinct','regional language tags normalize','active native track survives grouping','unidentified tracks do not collapse blindly','legacy labels merge only with an unambiguous typed voice','stable keys survive late merging and legacy preferences']}));

@@ -3,7 +3,7 @@ const source=path.resolve(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'..
 const replies=new Map(),calls=[];
 const c={URL,URLSearchParams,AbortController,Event,CustomEvent,Date,Promise,setTimeout,clearTimeout,console,localStorage:{getItem:()=>null,setItem:()=>{}},document:{getElementById:()=>({addEventListener:()=>{}})},addEventListener:()=>{},dispatchEvent:()=>{},fetch:async url=>{calls.push(url);if(!replies.has(url))throw Error('Unavailable fixture');const value=replies.get(url);return{ok:true,json:async()=>value,text:async()=>value};}};
 c.window=c;vm.createContext(c);
-for(const file of ['network.js','catalog-union.js','seasons.js','native-player.js','catalog.js'])vm.runInContext(fs.readFileSync(path.join(source,file),'utf8'),c);
+for(const file of ['network.js','catalog-union.js','seasons.js','audio-tracks.js','native-player.js','catalog.js'])vm.runInContext(fs.readFileSync(path.join(source,file),'utf8'),c);
 const catalog=c.WePlayCatalog,normal=value=>JSON.parse(JSON.stringify(value));
 let sequence=0;
 function item(source,title,serial=false){const id=source==='primary'?String(++sequence):source+'-'+(++sequence);return{id,title,_source:source,_kind:serial?'series':'movie',_detail:true,xfields:{year:'2026',original_title:title,postproduction:'Неверная озвучка из описания',film:'https://fixture.invalid/'+id}};}
@@ -19,8 +19,13 @@ function video(record,rows){record._video={publisher:'fixture',titleId:String(re
  assert.equal(calls.length,1,'first source starts without waiting for other providers');
  const e=resolved.payload.episodes[0];assert.equal(e.variants.length,2);
  let updates=0;await resolved.loadSources(()=>updates++);
- assert.equal(e.variants.length,6);assert.equal(e.variants.filter(v=>v.label==='Общая').length,1,'same stream is deduplicated');
- const duplicates=e.variants.filter(v=>v.label==='Студия A');assert.equal(duplicates.length,2);assert.notEqual(duplicates[0].caption,duplicates[1].caption);assert.notEqual(duplicates[0].preferenceKey,duplicates[1].preferenceKey);
+ assert.equal(e.variants.length,5);assert.equal(e.variants.filter(v=>v.label==='Общая').length,1,'same stream is deduplicated');
+ const duplicates=e.variants.filter(v=>v.label==='Студия A');assert.equal(duplicates.length,1);assert.equal(duplicates[0]._sources.length,2);assert.equal(duplicates[0].sources.length,2);
+ replies.set('https://plapi.cdnvideohub.com/api/v1/player/sv/video/other-a',{sources:{hlsUrl:'https://fixture.invalid/a-backup.m3u8'}});
+ const aIndex=e.variants.indexOf(duplicates[0]),backup=await resolved.resolveEpisode(e,aIndex);assert.equal(backup.versionId,second.id);assert.equal(backup.url,'https://fixture.invalid/a-backup.m3u8');
+ replies.set('https://plapi.cdnvideohub.com/api/v1/player/sv/video/only-a',{sources:{hlsUrl:'https://fixture.invalid/a-primary.m3u8'}});
+ duplicates[0]._activeSource=duplicates[0]._sources[0];
+ const primaryAgain=await resolved.resolveEpisode(e,aIndex,{retry:true,failedStreamKey:backup.streamKey});assert.equal(primaryAgain.versionId,first.id);assert.equal(primaryAgain.voiceKey,backup.voiceKey);
  const legacyIndex=e.variants.findIndex(v=>v.label==='Дубляж'),legacy=await resolved.resolveEpisode(e,legacyIndex);
  assert.equal(legacy.format,undefined,'legacy URLs retain automatic HLS/MP4 detection');assert.equal(legacy.audioTrack,1);assert.equal(legacy.versionId,third.id);assert.equal(legacy.transport,'');assert.ok(legacy.url.endsWith('master.m3u8'));
  replies.set('https://plapi.cdnvideohub.com/api/v1/player/sv/video/only-b',{sources:{hlsUrl:'https://fixture.invalid/b.m3u8',mpegTinyUrl:'https://fixture.invalid/b-tiny.mp4'}});
@@ -30,8 +35,24 @@ function video(record,rows){record._video={publisher:'fixture',titleId:String(re
  video(seriesB,[{vkId:'b2',voiceStudio:'B2',season:1,episode:2},{vkId:'b3',voiceStudio:'B3',season:2,episode:1}]);catalog.remember(seriesA);catalog.remember(seriesB);
  const serial=c.WePlayCatalogUnion.combine([seriesA,seriesB])[0],p=await catalog.player(serial,null,null,{sourceId:seriesA.id,season:1,episode:2});await p.loadSources();
  assert.equal(p.payload.episodes.length,2);assert.deepEqual(normal(p.payload.episodes[0].variants.map(v=>v.label)),['A1']);assert.deepEqual(normal(p.payload.episodes[1].variants.map(v=>v.label)),['A2','B2']);
+ const mobland=item('pub','MobLand voice types',true);video(mobland,[
+  {vkId:'rhs-mvo',voiceStudio:'RedHeadSound',voiceType:'Многоголосый',season:1,episode:8},
+  {vkId:'rhs-dub',voiceStudio:'RedHeadSound',voiceType:'Дубляж',season:1,episode:8},
+  {vkId:'lf-a',voiceStudio:'LostFilm',voiceType:'Многоголосый',season:1,episode:8},
+  {vkId:'lf-b',voiceStudio:'Lost Film',voiceType:'Многоголосый',season:1,episode:8},
+  {vkId:'rezka',voiceStudio:'HDrezka Studio',voiceType:'Многоголосый',season:1,episode:8},
+  {vkId:'rezka-adult',voiceStudio:'HDrezka Studio 18+',voiceType:'Многоголосый',season:1,episode:8},
+  {vkId:'rhs-dub',voiceStudio:'RedHeadSound',voiceType:'Многоголосый',season:1,episode:8},
+  {vkId:'lf-next',voiceStudio:'Лостфильм',voiceType:'Многоголосый',season:1,episode:9}
+ ]);catalog.remember(mobland);const typed=await catalog.player(mobland),episode=typed.payload.episodes[0];
+ assert.ok(typed.resolveEpisode);assert.equal(typed.loadSources,undefined);assert.equal(episode.variants.length,5);assert.equal(new Set(episode.variants.map(v=>v.label)).size,5);
+ assert.deepEqual(normal(episode.variants.filter(v=>v.label.startsWith('RedHeadSound')).map(v=>v.label)),['RedHeadSound · Многоголосый','RedHeadSound · Дубляж']);
+ const lost=episode.variants.find(v=>v.label==='LostFilm');assert.equal(lost._sources.length,2);assert.equal(c.WePlayAudio.preferredIndex(typed.payload.episodes[1].variants,'',lost.preferenceKey),0);
+ assert.ok(episode.variants[0]._sources.every(row=>row.streamKey!=='vk:rhs-dub'),'conflicting metadata cannot add a known dub to an MVO fallback');
+ replies.set('https://plapi.cdnvideohub.com/api/v1/player/sv/video/rhs-dub',{sources:{hlsUrl:'https://fixture.invalid/dub.m3u8'}});
+ const beforeDub=calls.filter(url=>url.endsWith('/rhs-dub')).length;await assert.rejects(typed.resolveEpisode(episode,0));assert.equal(calls.filter(url=>url.endsWith('/rhs-dub')).length,beforeDub,'MVO must not fall back to a different dub');
  const held=item('pub','Playback priority');video(held,[{vkId:'priority',voiceStudio:'Priority'}]);catalog.remember(held);
  c.WePlayNetwork.setPlayback(true);const background=catalog.voices(held);await new Promise(resolve=>setTimeout(resolve,0));
  let timeout;try{const playing=await Promise.race([catalog.player(held),new Promise((resolve,reject)=>{timeout=setTimeout(()=>reject(Error('Playback waited for a suspended profile request')),2000);})]);assert.equal(playing.payload.episodes[0].variants[0].label,'Priority');assert.equal(c.WePlayNetwork.snapshot().backgroundActive,0);}finally{clearTimeout(timeout);c.WePlayNetwork.setPlayback(false);}await background;
- console.log(JSON.stringify({result:'PASS',checks:['first-source startup is independent of other providers','all sources enrich the same stable episode objects','identical video IDs deduplicate; distinct recordings retain source labels','legacy HLS keeps transport and exact audio-track index','API tracks resolve through their owning source','offline sources do not cancel healthy sources','series merge only matching season and episode','playback never joins a suspended profile voice request']}));
+ console.log(JSON.stringify({result:'PASS',checks:['first-source startup is independent of other providers','all sources enrich the same stable episode objects','same voice merges distinct recordings and retains delivery routes','legacy HLS keeps transport and exact audio-track index','API tracks resolve through their owning source','offline sources do not cancel healthy sources','series merge only matching season and episode','playback never joins a suspended profile voice request']}));
 })().catch(e=>{console.error(e);process.exit(1);});

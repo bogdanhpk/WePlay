@@ -298,7 +298,7 @@
   function player(item,preferred,season,resume,background){
     var media=!background,choices=playbackChoices(item,preferred),last,attempted={};
     if(!preferred&&resume&&resume.sourceId)choices=choices.filter(function(v){return String(v.id)===resume.sourceId;}).concat(choices.filter(function(v){return String(v.id)!==resume.sourceId;}));
-    function next(i){if(i>=choices.length)return Promise.reject(last||new Error('Вариант просмотра недоступен.'));attempted[String(choices[i].id)]=true;return rawDetail(choices[i],false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){var episodes=WePlayNativePlayer.parse(resolved.payload);if(resume&&WePlaySeasons.resumeIndex(episodes,resume)<0)throw new Error('Сохранённая серия недоступна в этом источнике.');if(season!==undefined&&season!==null&&WePlaySeasons.startIndex(episodes,season)<0)throw new Error('Выбранный сезон недоступен в этом источнике.');resolved=Object.assign({},resolved,{source:choices[i]._source||'primary',versionId:String(choices[i].id)});return choices.length>1?combinedPlayback(choices,resolved,attempted,media):resolved;}).catch(function(e){last=e;return next(i+1);});}
+    function next(i){if(i>=choices.length)return Promise.reject(last||new Error('Вариант просмотра недоступен.'));attempted[String(choices[i].id)]=true;return rawDetail(choices[i],false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){var episodes=WePlayNativePlayer.parse(resolved.payload);if(resume&&WePlaySeasons.resumeIndex(episodes,resume)<0)throw new Error('Сохранённая серия недоступна в этом источнике.');if(season!==undefined&&season!==null&&WePlaySeasons.startIndex(episodes,season)<0)throw new Error('Выбранный сезон недоступен в этом источнике.');resolved=Object.assign({},resolved,{source:choices[i]._source||'primary',versionId:String(choices[i].id)});var named=episodes.some(function(e){return e.audio&&Array.isArray(e.audio.names)&&e.audio.names.some(function(label){return typeof label==='string'&&label.trim()&&label.trim().toLowerCase()!=='delete';});});return choices.length>1||resolved.resolveEpisode||named?combinedPlayback(choices,resolved,attempted,media):resolved;}).catch(function(e){last=e;return next(i+1);});}
     return next(0);
   }
   function combinedPlayback(choices,initial,attempted,media){
@@ -315,43 +315,48 @@
       if(!serial&&list.length!==1)return false;
       list.forEach(function(e){
         var target=byEpisode[episodeKey(e)];if(!target)return;
-        var audio=e.audio||{},order=audio.order||[],tracks=resolved.resolveEpisode?(e.variants||[]).map(function(v,i){return{label:v.label,index:i,id:v.vkId};}):(audio.names&&audio.names.length?audio.names:['Основная']).map(function(label,i){return{label:label,index:i};}).sort(function(a,b){return(order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);});
+        var audio=e.audio||{},order=audio.order||[],tracks=resolved.resolveEpisode?(e.variants||[]).map(function(v,i){return{label:v.label,index:i,id:v.vkId,studio:v.voiceStudio,voiceType:v.voiceType,language:v.language};}):(audio.names&&audio.names.length?audio.names:['Основная']).map(function(label,i){return{label:label,index:i,voiceType:audio.types&&audio.types[i],language:audio.languages&&audio.languages[i]};}).sort(function(a,b){return(order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);});
         if(!resolved.resolveEpisode&&!tracks.some(function(t){return typeof t.label==='string'&&t.label.trim()&&t.label.trim().toLowerCase()!=='delete';}))tracks=[{label:'Основная',index:0}];
         tracks.forEach(function(track){
           var label=typeof track.label==='string'?track.label.replace(/\s+/g,' ').trim():'';if(!label||label.toLowerCase()==='delete')return;
-          var key=track.id?'vk:'+track.id:'hls:'+e.hls+':'+track.index;
-          var previous=target.variants.filter(function(v){return v.key===key;})[0],caption='Источник '+number;
-          if(previous){if(previous.sources.indexOf(caption)<0){previous.sources.push(caption);previous.caption=previous.sources.join(' · ');}return;}
-          target.variants.push({key:key,label:label,caption:caption,sources:[caption],preferenceKey:String(record.id)+':'+label.toLowerCase()+':'+track.index,_source:{resolved:resolved,episode:e,track:track.index,record:record}});added=true;
+          var streamKey=track.id?'vk:'+track.id:'hls:'+e.hls+':'+track.index,info=WePlayAudio.describe(track,String(record.id)+':'+track.index),oldPreference=String(record.id)+':'+label.toLowerCase()+':'+track.index;
+          var previous=target.variants.filter(function(v){return !v._duplicateOf&&v._sources.some(function(route){return route.streamKey===streamKey;});})[0]||target.variants.filter(function(v){return !v._duplicateOf&&v.voiceKey===info.key;})[0],caption='Источник '+number,route={resolved:resolved,episode:e,track:track.index,record:record,streamKey:streamKey};
+          if(previous){if(previous.sources.indexOf(caption)<0)previous.sources.push(caption);if(previous._preferenceKeys.indexOf(oldPreference)<0)previous._preferenceKeys.push(oldPreference);if(!previous._audio.type&&info.type){previous._preferenceKeys.push(previous.preferenceKey);previous._audio=info;previous.voiceKey=info.key;previous.key=previous.preferenceKey='voice:'+info.key;}if(!previous._sources.some(function(v){return v.streamKey===streamKey;}))previous._sources.push(route);added=true;return;}
+          target.variants.push({key:'voice:'+info.key,voiceKey:info.key,label:info.label,caption:'',sources:[caption],preferenceKey:'voice:'+info.key,_preferenceKeys:[oldPreference],_audio:info,_source:route,_sources:[route]});added=true;
         });
+        WePlayAudio.coalesce(target.variants);
       });return added;
     }
     var first=choices.filter(function(c){return String(c.id)===initial.versionId;})[0];add(initial,first);loaded[initial.versionId]=true;
     function notify(){listeners.forEach(function(callback){callback();});}
     var result={payload:{episodes:episodes},source:initial.source,versionId:initial.versionId,
-      resolveEpisode:function(e,index){
-        var variant=e.variants[index];if(!variant)return Promise.reject(new Error('Озвучка недоступна для этой серии.'));
-        var row=variant._source,play=row.resolved;
-        return Promise.resolve(play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:variant.label,audioNames:row.episode.audio&&row.episode.audio.names||[]}).then(function(stream){
-          var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);
-          return Object.assign({},typeof stream==='string'?{url:stream}:stream,{seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
-        });
+      resolveEpisode:function(e,index,retry){
+        var variant=WePlayAudio.root(e.variants[index]);if(!variant)return Promise.reject(new Error('Озвучка недоступна для этой серии.'));
+        var routes=variant._sources.slice(),selected=retry&&retry.retry&&retry.failedStreamKey?routes.filter(function(row){return row.streamKey===retry.failedStreamKey;})[0]||variant._activeSource:variant._activeSource;
+        if(selected&&routes.indexOf(selected)>=0)routes=retry&&retry.retry?routes.filter(function(row){return row!==selected;}).concat([selected]):[selected].concat(routes.filter(function(row){return row!==selected;}));
+        function next(at,last){if(at>=routes.length)return Promise.reject(last||new Error('Озвучка временно недоступна.'));var row=routes[at],play=row.resolved;
+          return Promise.resolve().then(function(){var names=row.episode.audio&&row.episode.audio.names||[];return play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:String(names[row.track]||variant.label).replace(/\s+/g,' ').trim(),audioNames:names};}).then(function(stream){
+            var raw=typeof stream==='string'?stream:stream&&stream.url;if(!/^https?:\/\//.test(raw||''))throw new Error('Некорректный адрес видео.');variant=WePlayAudio.root(variant);variant._activeSource=row;
+            var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);return Object.assign({},typeof stream==='string'?{url:stream}:stream,{voiceKey:variant.preferenceKey,streamKey:row.streamKey,seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
+          }).catch(function(error){return next(at+1,error);});
+        }return next(0);
       },
       loadSources:function(onUpdate){
         if(onUpdate)listeners.push(onUpdate);
         if(pendingTask)return pendingTask;
         var remaining=choices.filter(function(c){return !loaded[String(c.id)]&&!attempted[String(c.id)];}),at=0;
         function worker(){var record=remaining[at++];if(!record)return Promise.resolve();return rawDetail(record,false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){if(add(resolved,record))notify();}).catch(function(){}).then(worker);}
-        pendingTask=Promise.all([worker(),worker()]).then(function(){notify();return result;});return pendingTask;
+        pendingTask=Promise.all([worker(),worker()]).then(function(){episodes.forEach(function(e){WePlayAudio.mergeUnknown(e.variants);});notify();return result;});return pendingTask;
       }
-    };return result;
+    };if(choices.length===1){episodes.forEach(function(e){WePlayAudio.mergeUnknown(e.variants);});delete result.loadSources;}return result;
   }
   function voices(item,resume){
     return player(item,null,null,resume,true).then(function(resolved){return resolved.loadSources?resolved.loadSources():resolved;}).then(function(resolved){
       var episodes=WePlaySeasons.ordered(WePlayNativePlayer.parse(resolved.payload)),at=resume?WePlaySeasons.resumeIndex(episodes,resume):0;
       if(at<0)return{labels:[]};
-      var episode=episodes[at],audio=episode.audio||{},order=resolved.resolveEpisode?[]:audio.order||[],names=resolved.resolveEpisode?(episode.variants||[]).map(function(variant){return variant.label;}):audio.names||[],seen=Object.create(null);
-      var labels=names.map(function(label,index){return{label:typeof label==='string'?label.replace(/\s+/g,' ').trim():'',index:index};}).filter(function(track){return track.label&&track.label.toLowerCase()!=='delete';}).sort(function(a,b){return (order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);}).filter(function(track){var key=track.label.toLowerCase();if(seen[key])return false;seen[key]=true;return true;}).map(function(track){return track.label;});
+      var episode=episodes[at],audio=episode.audio||{},order=resolved.resolveEpisode?[]:audio.order||[],names=resolved.resolveEpisode?(episode.variants||[]).filter(function(v){return !v._duplicateOf;}).map(function(variant){return variant.label;}):audio.names||[];
+      var rows=names.map(function(label,index){return{label:typeof label==='string'?label.replace(/\s+/g,' ').trim():'',index:index};}).filter(function(track){return track.label&&track.label.toLowerCase()!=='delete';}).sort(function(a,b){return (order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);});
+      var labels=(resolved.resolveEpisode?rows:WePlayAudio.unique(rows)).map(function(track){return track.label;});
       return{labels:labels,source:resolved.source,versionId:resolved.versionId,season:episode.season,episode:episode.episode};
     });
   }
@@ -383,7 +388,7 @@
     if(!item._video)return Promise.resolve().then(function(){return fetchData(playerURL(item),false,'omit',12000,false,media);}).then(function(html){return{payload:html};});
     return playlist(item,12000,false,media).then(function(j){
       var groups={},episodes=[];(j.items||[]).forEach(function(entry){if(!entry.vkId)return;var season=j.isSerial?Number(entry.season)||1:null,number=j.isSerial?Number(entry.episode)||1:null,k=season+':'+number;
-        if(!groups[k]){groups[k]={season:season,episode:number,variants:[]};episodes.push(groups[k]);}groups[k].variants.push({label:entry.voiceStudio||entry.voiceType||'Основная',vkId:String(entry.vkId)});
+        if(!groups[k]){groups[k]={season:season,episode:number,variants:[]};episodes.push(groups[k]);}groups[k].variants.push({label:entry.voiceStudio||entry.voiceType||'Основная',voiceStudio:entry.voiceStudio||'',voiceType:entry.voiceType||'',language:entry.voiceLanguage||entry.language||entry.lang||'',vkId:String(entry.vkId)});
       });episodes.sort(function(a,b){return (a.season||0)-(b.season||0)||(a.episode||0)-(b.episode||0);});
       if(!episodes.length)throw new Error('В этом источнике пока нет доступного видео.');return{payload:{episodes:episodes},transport:'plain',resolveEpisode:videoSource};
     });
