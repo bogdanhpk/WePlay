@@ -518,7 +518,7 @@
     for(var i=0;i<brands.length;i++)if(brands[i][1].test(name))return brands[i][0];return null;
   }
   function detail(g) {
-    var route=current,known=cache['full-'+route.id];var loading=pageLoader('Загружаем фильм');
+    var route=current,known=cache['full-'+route.id];if(known&&!xf(known,'film'))known=null;var loading=pageLoader('Загружаем фильм');
     return (known?Promise.resolve(known):api({action:'news',do:'get',id:route.id}).then(function(j){
       var d=j.data,item=Array.isArray(d)?d[0]:(d.item||d.news||d);if(!item||!item.id)throw new Error('Фильм не найден');cache['full-'+route.id]=item;return item;
     })).then(function(item){

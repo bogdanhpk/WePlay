@@ -38,7 +38,12 @@
   function remember(item){if(item&&item.id){
     var expanded=String(item.id).match(/^lat-kp-([1-9]\d{0,11})$/),x=union.fields(item);
     if(expanded&&String(x.kinopoisk_id)===expanded[1])item=Object.assign({},item,{_source:'lat',_expanded:true,_detail:true,_video:{publisher:source('lat').searchPublisher,titleId:expanded[1],aggregator:'kp'},xfields:Object.assign({},x,{film:'https://plapi.cdnvideohub.com/api/v1/player/sv/playlist'})});
-    if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives)item._alternatives.forEach(remember);else index[String(item.id)]=item;if(item._categoryURL)paths[String(item.id)]=item._categoryURL;if(item.title)union.combine([item]);
+    if(item._categoryAlternatives){categoryGroups[String(item.id)]=item._categoryAlternatives;item._categoryAlternatives.forEach(remember);}if(item._alternatives)item._alternatives.forEach(remember);else {
+      // Continue-watching cards contain only display metadata. Keep the source locator
+      // and loaded player data when such a card is rendered after a full catalog record.
+      var previous=index[String(item.id)];if(previous){var fields=Object.assign({},union.fields(previous));Object.keys(union.fields(item)).forEach(function(key){var value=union.fields(item)[key];if(value!==undefined&&value!==null&&value!=='')fields[key]=value;});item=Object.assign({},previous,item,{xfields:fields});}
+      index[String(item.id)]=item;
+    }if(item._categoryURL)paths[String(item.id)]=item._categoryURL;if(item.title)union.combine([item]);
   }}
   function register(j){var d=j&&j.data;if(Array.isArray(d))d.forEach(remember);else if(d&&Array.isArray(d.items))d.items.forEach(remember);else if(d&&d.id)remember(d);return j;}
   Object.keys(stored).forEach(function(k){register(stored[k].data);});
@@ -119,7 +124,11 @@
   }
   function fact(doc,label){var value='';list(doc,'.flist li,.lfs-fact,.page__list li').some(function(row){var first=row.firstElementChild;if(first&&text(first).toLowerCase().indexOf(label.toLowerCase())===0){value=text(row).slice(text(first).length).replace(/^\s*:\s*/,'').trim();return true;}return false;});return value;}
   function detail(s,id,options){
-    var known=index[String(id)];if(known&&known._expanded)return Promise.resolve({success:true,data:known});if(!known||!known._url)throw new Error('Откройте фильм из каталога или поиска заново.');
+    var known=index[String(id)];if(known&&known._expanded)return Promise.resolve({success:true,data:known});
+    // Older local history deliberately omitted playback URLs. Recover the public
+    // catalog page from its stable source ID instead of treating it as unavailable.
+    if(known&&!known._url){var match=String(id).match(new RegExp('^'+s.id+'-([1-9]\\d*)$'));if(match&&s.id!=='primary'){known=Object.assign({},known,{_url:new URL(s.layout==='media'?'/'+match[1]:'/index.php?newsid='+match[1],s.base).href});index[String(id)]=known;}}
+    if(!known||!known._url)throw new Error('Откройте фильм из каталога или поиска заново.');
     if(s.layout==='media')return WePlayWebCatalog.detail(known,s,webHelpers(options)).then(function(item){remember(item);return{success:true,data:item};});
     return documentAt(known._url,s,null,options).then(function(doc){
       var item={id:id,title:known.title,_source:s.id,_url:known._url,_kind:known._kind,_kindHint:WePlayWebCatalog.breadcrumbKind(doc)||known._kindHint,_detail:true,xfields:Object.assign({},known.xfields)},x=item.xfields;
