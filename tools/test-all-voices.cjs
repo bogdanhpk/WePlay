@@ -45,7 +45,7 @@ function video(record,rows){record._video={publisher:'fixture',titleId:String(re
   {vkId:'rhs-dub',voiceStudio:'RedHeadSound',voiceType:'Многоголосый',season:1,episode:8},
   {vkId:'lf-next',voiceStudio:'Лостфильм',voiceType:'Многоголосый',season:1,episode:9}
  ]);catalog.remember(mobland);const typed=await catalog.player(mobland),episode=typed.payload.episodes[0];
- assert.ok(typed.resolveEpisode);assert.equal(typed.loadSources,undefined);assert.equal(episode.variants.length,5);assert.equal(new Set(episode.variants.map(v=>v.label)).size,5);
+ assert.ok(typed.resolveEpisode);assert.equal(typeof typed.loadSources,'function','automatic playback can discover sources after a fast profile');assert.equal((await catalog.player(mobland,mobland.id)).loadSources,undefined,'a pinned single source stays isolated');assert.equal(episode.variants.length,5);assert.equal(new Set(episode.variants.map(v=>v.label)).size,5);
  assert.deepEqual(normal(episode.variants.filter(v=>v.label.startsWith('RedHeadSound')).map(v=>v.label)),['RedHeadSound · Многоголосый','RedHeadSound · Дубляж']);
  const lost=episode.variants.find(v=>v.label==='LostFilm');assert.equal(lost._sources.length,2);assert.equal(c.WePlayAudio.preferredIndex(typed.payload.episodes[1].variants,'',lost.preferenceKey),0);
  assert.ok(episode.variants[0]._sources.every(row=>row.streamKey!=='vk:rhs-dub'),'conflicting metadata cannot add a known dub to an MVO fallback');

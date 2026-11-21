@@ -15,6 +15,12 @@ assert.equal(id(voice('Михаил Яроцкий','Авторская')),id(vo
 assert.equal(id(voice('Дублированный')),id(voice('Дубляж')));
 const unique=audio.unique([{label:'Lost Film',index:0},{label:'LostFilm',index:1}],1);assert.equal(unique.length,1);assert.equal(unique[0].index,1);assert.equal(unique[0].label,'LostFilm');
 const unknowns=audio.unique([{label:'Основная',index:0},{label:'Основная',index:1}],0);assert.equal(unknowns.length,2);assert.notEqual(unknowns[0].label,unknowns[1].label);
+for(const [label,lang] of [['rus0','ru'],['ukr7','uk'],['geo8','ka'],['eng9','en'],['kaz0','kk'],['uzb2','uz']]){
+ const info=audio.describe(voice(label),'source1');assert.equal(info.language,lang);assert.ok(info.anonymous);assert.ok(!info.label.includes(label));assert.ok(info.label.includes('Дорожка'));
+ assert.notEqual(info.key,audio.describe(voice(label),'source2').key,'unnamed tracks from different recordings stay separate');
+ const rows=[{label:info.label,_audio:info}];assert.equal(audio.preferredIndex(rows,info.label,''),0,'friendly labels retain selected track');
+}
+assert.equal(audio.describe({label:'rus0',studio:'rus0'},'scope').label,'rus0','an explicit studio is not treated as a technical track code');
 function row(track,n){const info=audio.describe(track,'route'+n);return{label:info.label,voiceKey:info.key,preferenceKey:'voice:'+info.key,_preferenceKeys:['old:'+n],_audio:info,sources:['Источник '+n],_sources:[{streamKey:'route'+n}]};}
 const a=row(voice('LostFilm'),1),b=row(voice('Lost Film','Многоголосый'),2),oldKey=a.preferenceKey;audio.mergeUnknown([a,b]);assert.equal(audio.root(b),a);assert.equal(a._sources.length,2);assert.equal(a._audio.type,'mvo');assert.equal(audio.preferredIndex([a,b],'',oldKey),0);assert.equal(audio.preferenceKey([a,b],oldKey),a.preferenceKey);
 const rhs=[row(voice('RedHeadSound'),1),row(voice('RedHeadSound','Дубляж'),2),row(voice('RedHeadSound','Многоголосый'),3)];audio.mergeUnknown(rhs);assert.equal(rhs.filter(r=>!r._duplicateOf).length,3);assert.equal(new Set(rhs.map(r=>r.label)).size,3);assert.equal(audio.preferredIndex(rhs,'RedHeadSound',''),0);
