@@ -8,7 +8,7 @@ WePlay — приложение для просмотра фильмов, сер
 | --- | --- | --- | --- |
 | Samsung Tizen | Tizen 5.5 и новее | [Скачать WGT](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-Tizen.wgt) | [Установка на Samsung](docs/INSTALL.md) |
 | LG webOS | webOS TV 5.0 и новее, Developer Mode | [Скачать IPK — 1.0.5](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/app.weplay.tv_1.0.5_all.ipk) | [Установка на LG](docs/INSTALL_WEBOS.md) |
-| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.52](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.52.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
+| Android TV / Google TV | Android 8.0 и новее, Android System WebView | [Скачать APK — 1.0.53](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.53.apk) | [Установка на Android TV](docs/INSTALL_ANDROID_TV.md) |
 
 [Контрольные суммы SHA256](downloads/SHA256SUMS.txt)
 
@@ -16,7 +16,7 @@ WePlay — приложение для просмотра фильмов, сер
 
 ## Возможности
 
-- Каталог фильмов, сериалов и мультфильмов, новинки и тематические подборки.
+- Каталог фильмов, сериалов и мультфильмов, новинки и тематические подборки. В «Подборках» есть «2026 год» с фильмами, сериалами, мультфильмами и мультсериалами за 2026 год.
 - Объединение каталогов из нескольких источников с автоматическим подключением.
 - Поиск по всем подключённым источникам с экранной клавиатурой ЙЦУКЕН и QWERTY. Расширенный каталог дополняет обычную выдачу, включая одноимённые фильмы разных лет.
 - Встроенный плеер с выбором озвучки, серии, качества и субтитров. Озвучки из доступных источников объединяются в одном меню; при переключении сохраняется позиция просмотра. Список качества объединяет проверенные HLS- и MP4-варианты разных источников одной озвучки, включая 4K. «Авто» продолжает искать более высокий вариант после старта и сохраняет позицию при переходе. [Как определяется качество](docs/PLAYBACK_QUALITY.md). Выбор 1080p или 4K переключает подходящий поток с сохранением позиции и паузы.

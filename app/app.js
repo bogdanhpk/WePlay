@@ -499,6 +499,7 @@
     header('Подборки','Истории под настроение');var loading=pageLoader('Загружаем подборки');
     return (categories.length?Promise.resolve(categories):api({action:'categories'}).then(function(j){categories=listOf(j);return categories;})).then(function(cats){
       if(g!==generation)return;loading.remove();var grid=element('div','collection-grid');grid.setAttribute('data-focus-grid','3');
+      var years=WePlayCatalog.yearCollections();cats=years.concat(cats.filter(function(c){return !years.some(function(year){return String(c.id)===year.id||text(c.name).replace(/\s*(?:год|года)\s*$/i,'').trim()===year.name.replace(/\s*год$/,'');});}));
       cats.filter(function(c){return Number(c.parentid||c.parent_id)===38;}).forEach(function(c){
         var name=text(c.name),glyph=/мультсериал/i.test(name)?'television-smiley':/мульт/i.test(name)?'smiley':/сериал|netflix|hbo/i.test(name)?'television':/семейн|детск|фантаст/i.test(name)?'sparkle':/наград|лучш|топ|преми/i.test(name)?'stack':'film-slate',b=button('','collection',function(){push({kind:'catalog',category:c.id,title:name});},'collection-'+c.id),top=element('span','collection-top'),symbol=element('span','collection-symbol'),arrow=element('span','collection-arrow');
         b.setAttribute('aria-label',name);top.setAttribute('aria-hidden','true');

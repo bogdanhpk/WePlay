@@ -1,0 +1,4 @@
+{
+  "signed": "{\"schema\":1,\"app\":\"app.weplay.tv\",\"channel\":\"stable\",\"version\":\"1.0.39\",\"sequence\":100000039,\"minShell\":1,\"createdAt\":\"2026-11-22T09:06:46.252Z\",\"payload\":{\"path\":\"releases/1.0.39/bundle.json\",\"sha256\":\"0c5542b8aebe88b21984fe09111a0f2ab709c3c2dee6f90e888948e52620d98c\",\"bytes\":2258137}}",
+  "signature": "V0xJV4GtutAttQKCDt4dH5PFnuxcqPiJrRrTPdoWCUcevjPvb6am3yPCaxHcPcCyESkoE9iVHoqnICG8h+FzBw=="
+}
