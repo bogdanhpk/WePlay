@@ -2,7 +2,13 @@
 (function(){
   'use strict';
   var API='https://api.themoviedb.org/3',TOKEN_KEY='weplay.tmdb.read-token.v1',pending={},pausedUntil=0,collectionLookup;
-  function token(){try{return String(window.WEPLAY_SETTINGS&&WEPLAY_SETTINGS.tmdbReadToken||localStorage.getItem(TOKEN_KEY)||'').trim();}catch(ignore){return '';}}
+  function token(){
+    var configured=String(window.WEPLAY_SETTINGS&&WEPLAY_SETTINGS.tmdbReadToken||'').trim();
+    // A personal installation seeds the device once. Later public APK updates keep
+    // using that device's token, without bundling it in a public download.
+    if(configured){try{if(localStorage.getItem(TOKEN_KEY)!==configured)localStorage.setItem(TOKEN_KEY,configured);}catch(ignore){}return configured;}
+    try{return String(localStorage.getItem(TOKEN_KEY)||'').trim();}catch(ignore){return '';}
+  }
   function available(){return !!token()||!!(window.WEPLAY_TMDB_INDEX&&WEPLAY_TMDB_INDEX.entries&&WEPLAY_TMDB_INDEX.entries.length);}
   function request(path,params,options){
     var secret=token();if(!secret||Date.now()<pausedUntil)return Promise.reject(new Error('TMDB temporarily unavailable'));

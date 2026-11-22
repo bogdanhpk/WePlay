@@ -1,7 +1,7 @@
 /* Display quality uses frame dimensions, never the screen size or requested level. */
 (function(){
   'use strict';
-  var formats=[[7680,4320],[4096,2160],[3840,2160],[2560,1440],[2048,1080],[1920,1080],[1280,720],[960,540],[854,480],[852,480],[640,360],[426,240]];
+  var formats=[[7680,4320],[4096,2160],[3840,2160],[2560,1440],[2048,1080],[1920,1080],[1280,720],[960,540],[854,480],[852,480],[640,360],[426,240],[256,144]];
   function dimension(value){value=Number(value);return isFinite(value)&&value>0&&value<=16384?Math.round(value):0;}
   function size(width,height){return{width:dimension(width),height:dimension(height)};}
   function height(value){
@@ -36,5 +36,25 @@
     if(legacy)return legacy;
     var chosen=available[0];available.forEach(function(level){if(level.height<=preference)chosen=level;});return chosen;
   }
-  window.WePlayQuality={size:size,height:height,tier:tier,description:description,levels:levels,preferred:preferred};
+  function wireURL(raw,transport,serverTime){
+    if(transport==='plain')return raw;
+    var u=new URL(raw);if(u.pathname.indexOf('/x-en-x/')===0)return raw;
+    var letters='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',map='DlChEXitLONYRkFjAsnBbymWzSHMqKPgQZpvwerofJTVdIuUcxaG';
+    var value=btoa(Math.round((serverTime||Date.now())/3600000)+'/'+u.pathname+u.search);
+    return u.origin+'/x-en-x/'+value.split('').map(function(c){var i=letters.indexOf(c);return i<0?c:map[i];}).join('');
+  }
+  function manifest(text){
+    if(!/^\s*#EXTM3U\b/.test(text||''))return [];
+    var raw=[],pattern=/#EXT-X-STREAM-INF:([^\r\n]+)/g,match;
+    while((match=pattern.exec(text))){
+      var resolution=/(?:^|,)\s*RESOLUTION=(\d+)x(\d+)(?:,|$)/i.exec(match[1]),bitrate=/(?:^|,)\s*(?:AVERAGE-)?BANDWIDTH=(\d+)/i.exec(match[1]);
+      if(resolution)raw.push({width:Number(resolution[1]),height:Number(resolution[2]),bitrate:bitrate?Number(bitrate[1]):0});
+    }
+    return levels(raw);
+  }
+  function probe(stream,options){
+    if(!stream||stream.format==='mp4'||/\.mp4(?:[?#]|$)/i.test(stream.url||''))return Promise.resolve([]);
+    return WePlayNetwork.request(wireURL(stream.url,stream.transport,stream.serverTime),{credentials:'omit'},Object.assign({timeout:3000,maxBytes:262144,media:true},options||{})).then(manifest);
+  }
+  window.WePlayQuality={size:size,height:height,tier:tier,description:description,levels:levels,preferred:preferred,wireURL:wireURL,manifest:manifest,probe:probe};
 }());

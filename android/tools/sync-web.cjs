@@ -27,7 +27,10 @@ for(const file of files){
   fs.writeFileSync(destination,bytes);
 }
 fs.copyFileSync(path.join(root,'platform/android.js'),path.join(target,'android.js'));
-fs.writeFileSync(path.join(target,'settings.js'),"window.WEPLAY_SETTINGS = { apiToken: '', tmdbReadToken: '' };\n");
+// Personal credentials are opt-in for a local build; the default APK stays public.
+const personalSettings=process.env.WEPLAY_PERSONAL_TMDB_SETTINGS;let readToken='';
+if(personalSettings){const input=JSON.parse(fs.readFileSync(path.resolve(personalSettings),'utf8'));readToken=String(input.tmdbReadToken||input.readToken||'').trim();if(!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}$/.test(readToken))throw Error('Expected a TMDB read-access token in personal settings');}
+fs.writeFileSync(path.join(target,'settings.js'),'window.WEPLAY_SETTINGS = '+JSON.stringify({apiToken:'',tmdbReadToken:readToken})+';\n');
 fs.writeFileSync(path.join(target,'index.html'),html);
 fs.cpSync(path.join(root,'licenses'),path.join(target,'licenses'),{recursive:true});
 const manifest={platform:'android-tv',version:version.versionName,interfaceVersion:version.interfaceVersion,files:[]};
@@ -35,4 +38,4 @@ for(const file of [...files,'settings.js','android.js','index.html',...fs.readdi
   const bytes=fs.readFileSync(path.join(target,file));manifest.files.push({path:file,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});
 }
 fs.writeFileSync(path.join(root,'web-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
-console.log(JSON.stringify({files:manifest.files.length,settings:'empty; no personal credentials',interface:manifest.interfaceVersion}));
+console.log(JSON.stringify({files:manifest.files.length,settings:personalSettings?'personal credentials; do not publish':'empty; no personal credentials',interface:manifest.interfaceVersion}));

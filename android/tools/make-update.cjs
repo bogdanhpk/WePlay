@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /* Describe a signed, versioned Android APK. This never reads or publishes signing keys. */
 'use strict';
-const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),cp=require('node:child_process');
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),cp=require('node:child_process'),os=require('node:os');
 const input=process.argv[2],outArg=process.argv.indexOf('--out'),out=path.resolve(outArg>=0?process.argv[outArg+1]:path.join(__dirname,'../..'));
 if(!input)throw Error('Usage: node tools/make-update.cjs signed.apk --out repository-root');
 const apk=path.resolve(input),sdk=process.env.ANDROID_HOME||process.env.ANDROID_SDK_ROOT;
 if(!sdk)throw Error('Set ANDROID_HOME to your Android SDK.');
+const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'weplay-apk-check-'));let settings;
+try{const jar=process.env.JAVA_HOME?path.join(process.env.JAVA_HOME,'bin',process.platform==='win32'?'jar.exe':'jar'):'jar';cp.execFileSync(jar,['xf',apk,'assets/weplay/settings.js'],{cwd:temporary});settings=fs.readFileSync(path.join(temporary,'assets/weplay/settings.js'),'utf8');}finally{fs.rmSync(temporary,{recursive:true,force:true});}
+if([...settings.matchAll(/(?:apiToken|tmdbReadToken)[\"']?\s*:\s*[\"']([^\"']*)/g)].some(match=>match[1].trim()))throw Error('Personal APK contains credentials and cannot be published as an update.');
 const tools=path.join(sdk,'build-tools','35.0.0'),badging=cp.execFileSync(path.join(tools,'aapt'),['dump','badging',apk],{encoding:'utf8'});
 const pkg=badging.match(/package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'/),min=badging.match(/sdkVersion:'([0-9]+)'/);
 if(!pkg||pkg[1]!=='app.weplay.tv'||!pkg[3].match(/^[0-9]+\.[0-9]+\.[0-9]+$/)||!min)throw Error('Expected a release WePlay Android TV APK.');

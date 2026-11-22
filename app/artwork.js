@@ -146,10 +146,10 @@
     if(compact&&/^https:\/\/api\.start\.ru\/poster\/[^?]+\?poster_type=background&dsize=1920x1080$/.test(target))return [target.replace('1920x1080','640x360'),target];
     if(compact&&/^https:\/\/m\.media-amazon\.com\//.test(target))target=target.replace(/_SX\d+\./,'_SX'+size.width+'.');
     if(compact&&/^https:\/\/st\.kp\.yandex\.net\/images\/(?:film_big\/|film_iphone\/iphone\d+_)\d+\.jpg$/.test(target))target=target.replace(/\/(?:film_big\/|film_iphone\/iphone\d+_)(\d+)\.jpg$/,'/film_iphone/iphone360_$1.jpg');
-    var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=/Tizen/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
+    var relay='https://wsrv.nl/?url='+encodeURIComponent(target)+'&output=jpg&q='+(compact?82:90)+'&w='+size.width+'&fit=inside&we',isTV=!!(window.WePlayTV&&/^(?:tizen|android)$/.test(WePlayTV.name))||/Tizen|Android/i.test(navigator.userAgent),remote=/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org|images\.metahub\.space)/.test(target);
     var compactPublicFrame=role==='wide'&&!sized&&/^https?:\/\/[^/?#@\s]+\/[^?#\s]+$/.test(target);
     var directFrame=/^https:\/\/(?:images\.restream-media\.net|images\.metahub\.space)\//.test(target);
-    var urls=!directFrame&&(isTV&&remote&&!compact||compactPublicFrame)?[relay,target]:[target,relay];
+    var urls=!directFrame&&(isTV&&remote||compactPublicFrame)?[relay,target]:[target,relay];
     if(compact&&target!==raw)urls.push(raw);
     return urls;
   }

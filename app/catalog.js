@@ -337,7 +337,7 @@
     return next(0);
   }
   function combinedPlayback(choices,initial,attempted,media,discover){
-    var original=WePlaySeasons.ordered(WePlayNativePlayer.parse(initial.payload)),episodes=[],byEpisode={},listeners=[],pendingTask;
+    var original=WePlaySeasons.ordered(WePlayNativePlayer.parse(initial.payload)),episodes=[],byEpisode={},listeners=[],pendingTask,sourceTasks={};
     var serial=original.some(function(e){return e.season!==undefined&&e.season!==null;}),loaded={};
     function episodeKey(e){
       if(!serial)return e.season===undefined||e.season===null?'movie':'';
@@ -364,26 +364,65 @@
     }
     var first=choices.filter(function(c){return String(c.id)===initial.versionId;})[0];add(initial,first);loaded[initial.versionId]=true;
     function notify(){listeners.forEach(function(callback){callback();});}
+    function loadKnown(){
+      var remaining=choices.filter(function(c){return !loaded[String(c.id)]&&!attempted[String(c.id)];}),at=0;
+      function worker(){var record=remaining[at++];if(!record)return Promise.resolve();var key=String(record.id);loaded[key]=true;
+        sourceTasks[key]=rawDetail(record,false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){if(add(resolved,record))notify();}).catch(function(){});
+        return sourceTasks[key].then(worker);
+      }
+      return Promise.all([worker(),worker()].concat(Object.keys(sourceTasks).map(function(key){return sourceTasks[key];})));
+    }
+    function streamFor(row,variant){
+      var play=row.resolved,names=row.episode.audio&&row.episode.audio.names||[];
+      return Promise.resolve().then(function(){return play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:String(names[row.track]||variant.label).replace(/\s+/g,' ').trim(),audioNames:names};}).then(function(stream){
+        var raw=typeof stream==='string'?stream:stream&&stream.url;if(!/^https?:\/\//.test(raw||''))throw new Error('Некорректный адрес видео.');
+        var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);return Object.assign({},typeof stream==='string'?{url:stream}:stream,{voiceKey:variant.preferenceKey,streamKey:row.streamKey,seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
+      });
+    }
+    function inspect(row,variant){
+      if(row.qualityTask&&Date.now()-row.qualityAt<120000)return row.qualityTask;
+      row.qualityAt=Date.now();row.qualityTask=streamFor(row,variant).then(function(stream){return WePlayQuality.probe(stream).catch(function(){return [];}).then(function(levels){return{row:row,stream:stream,levels:levels};});}).catch(function(error){row.qualityTask=null;throw error;});return row.qualityTask;
+    }
+    function inspectAll(routes,variant,budget){
+      var at=0,records=[],expired=false,timer;function worker(){var row=!expired&&routes[at++];if(!row)return Promise.resolve();return inspect(row,variant).then(function(record){records.push(record);},function(){}).then(worker);}
+      var task=Promise.all([worker(),worker()]).then(function(){return records;});
+      if(!budget)return task;
+      return Promise.race([task,new Promise(function(done){timer=setTimeout(function(){expired=true;done(records.slice());},budget);})]).then(function(value){clearTimeout(timer);return value;});
+    }
+    function qualityScore(record,target,excluded){
+      var available=record.levels.filter(function(level){return !excluded||excluded.indexOf(level.height)<0;}),chosen=target?WePlayQuality.preferred(available,target):available[available.length-1];
+      if(!chosen)return 0;return target&&chosen.height>target?1:chosen.height;
+    }
     var result={payload:{episodes:episodes},source:initial.source,versionId:initial.versionId,
       resolveEpisode:function(e,index,retry){
         var variant=WePlayAudio.root(e.variants[index]);if(!variant)return Promise.reject(new Error('Озвучка недоступна для этой серии.'));
         var routes=variant._sources.slice(),selected=retry&&retry.retry&&retry.failedStreamKey?routes.filter(function(row){return row.streamKey===retry.failedStreamKey;})[0]||variant._activeSource:variant._activeSource;
         if(selected&&routes.indexOf(selected)>=0)routes=retry&&retry.retry?routes.filter(function(row){return row!==selected;}).concat([selected]):[selected].concat(routes.filter(function(row){return row!==selected;}));
         function next(at,last){if(at>=routes.length)return Promise.reject(last||new Error('Озвучка временно недоступна.'));var row=routes[at],play=row.resolved;
-          return Promise.resolve().then(function(){var names=row.episode.audio&&row.episode.audio.names||[];return play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:String(names[row.track]||variant.label).replace(/\s+/g,' ').trim(),audioNames:names};}).then(function(stream){
-            var raw=typeof stream==='string'?stream:stream&&stream.url;if(!/^https?:\/\//.test(raw||''))throw new Error('Некорректный адрес видео.');variant=WePlayAudio.root(variant);variant._activeSource=row;
-            var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);return Object.assign({},typeof stream==='string'?{url:stream}:stream,{voiceKey:variant.preferenceKey,streamKey:row.streamKey,seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
+          return streamFor(row,variant).then(function(stream){
+            variant=WePlayAudio.root(variant);variant._activeSource=row;return stream;
           }).catch(function(error){return next(at+1,error);});
-        }return next(0);
+        }
+        if(!window.WePlayQuality||!retry||retry.quality===undefined||retry.retry)return next(0);
+        var target=Number(retry.quality)||0,excluded=retry.excludeQualities||[];
+        return inspect(routes[0],variant).catch(function(){return null;}).then(function(first){
+          var score=first&&qualityScore(first,target,excluded);
+          if(first&&!retry.bestQuality&&(target?score===target:score>=1080))return first;
+          // Only already known catalog alternatives participate in startup. Exhaustive
+          // discovery belongs to the quality menu, so slow searches cannot hold video.
+          var timer;return Promise.race([loadKnown(),new Promise(function(done){timer=setTimeout(done,900);})]).then(function(){clearTimeout(timer);variant=WePlayAudio.root(e.variants[index]);routes=variant._sources.slice();return inspectAll(routes,variant,2000);}).then(function(records){
+            records.sort(function(a,b){return qualityScore(b,target,excluded)-qualityScore(a,target,excluded)||routes.indexOf(a.row)-routes.indexOf(b.row);});return records[0]||first;
+          });
+        }).then(function(chosen){if(!chosen)return next(0);variant._activeSource=chosen.row;return chosen.stream;});
+      },
+      loadQualities:function(e,index){
+        return result.loadSources().then(function(){var variant=WePlayAudio.root(e.variants[index]);return variant?inspectAll(variant._sources.slice(),variant):[];}).then(function(records){
+          var raw=[];records.forEach(function(record){record.levels.forEach(function(level){raw.push({width:level.width,height:level.rawHeight,bitrate:level.bitrate});});});return WePlayQuality.levels(raw);
+        });
       },
       loadSources:function(onUpdate){
         if(onUpdate)listeners.push(onUpdate);
         if(pendingTask)return pendingTask;
-        function loadKnown(){
-          var remaining=choices.filter(function(c){return !loaded[String(c.id)]&&!attempted[String(c.id)];}),at=0;
-          function worker(){var record=remaining[at++];if(!record)return Promise.resolve();loaded[String(record.id)]=true;return rawDetail(record,false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){if(add(resolved,record))notify();}).catch(function(){}).then(worker);}
-          return Promise.all([worker(),worker()]);
-        }
         pendingTask=loadKnown().then(function(){return discover?fullDetail(initial.versionId,media).catch(function(){}):null;}).then(function(){
           var known=union.find(initial.versionId);if(known)versions(known).forEach(function(record){if(!choices.some(function(v){return String(v.id)===String(record.id);}))choices.push(record);});return loadKnown();
         }).then(function(){episodes.forEach(function(e){WePlayAudio.mergeUnknown(e.variants);});notify();return result;});return pendingTask;

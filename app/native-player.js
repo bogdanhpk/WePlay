@@ -42,6 +42,7 @@
   var postplay=null,postplayDismissals={},postplayAutoplay=true,remoteSeekKey=0;
   var streamInfo=null,audioSourcePreference='',audioLoading=false,audioSourcesRequested=false;
   var recoveryTimer=null,stallTimer=null,recoveryAttempts=0,failedResolutions=[];
+  var qualityLookups={},preferBestQuality=false;
   try{audioPreference=localStorage.getItem('lord.audioPreference')||'';}catch(ignore){}
   try{audioSourcePreference=localStorage.getItem('weplay.audioSourcePreference')||'';}catch(ignore){}
   try{qualityPreference=Number(localStorage.getItem('lord.quality.v1'))||0;}catch(ignore){}
@@ -83,11 +84,7 @@
   }
   function state(){try{return api?api.getState():(video?(video.paused?'PAUSED':'PLAYING'):'NONE');}catch(ignore){return 'NONE';}}
   function encodedUrl(raw){
-    if((streamInfo?streamInfo.transport:options&&options.transport)==='plain')return raw;
-    var u=new URL(raw);if(u.pathname.indexOf('/x-en-x/')===0)return raw;
-    var letters='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',map='DlChEXitLONYRkFjAsnBbymWzSHMqKPgQZpvwerofJTVdIuUcxaG';
-    var value=btoa(Math.round((Date.now()+serverOffset)/3600000)+'/'+u.pathname+u.search);
-    return u.origin+'/x-en-x/'+value.split('').map(function(c){var i=letters.indexOf(c);return i<0?c:map[i];}).join('');
+    return WePlayQuality.wireURL(raw,streamInfo?streamInfo.transport:options&&options.transport,Date.now()+serverOffset);
   }
   function ProviderLoader(config){
     var inner=new Hls.DefaultConfig.loader(config),self=this;this.context=null;
@@ -308,15 +305,16 @@
   }
   function qualityLevels(){
     var levels=WePlayQuality.levels(hls&&hls.levels);
-    return hls&&hls.config.minAutoBitrate?levels.filter(function(level){return level.index>=hls.minAutoLevel;}):levels;
+    return WePlayTV.name==='android'&&options.resolveEpisode?levels.filter(function(level){return level.rawHeight>=144;}):levels;
   }
   function androidDubStartLevel(){
     if(!options.resolveEpisode)return null;
     var lowest=hls.levels[0];
-    if(!lowest||!lowest.height||lowest.height>=144||lowest.width>320)return null;
-    // Some cropped alternate dubs fail when Android changes video renditions in place.
-    var levels=qualityLevels();
-    var floor=levels.find(function(level){return level.height>=360&&level.height<=480&&level.rawHeight>=144&&level.bitrate>0;});
+    if(!lowest||!lowest.height||!hls.levels.some(function(level){return level.height&&level.width&&(level.height<144||level.width/level.height>1.9);} ))return null;
+    // These cropped ladders can fail when Android changes dimensions in place.
+    // Anchor Auto at TV quality, rather than permanently capping it at 360p.
+    // Explicit quality changes rebuild the decoder and can still use any safe level.
+    var levels=qualityLevels().filter(function(level){return level.height>=360&&level.rawHeight>=144&&level.bitrate>0;}),floor=WePlayQuality.preferred(levels,qualityPreference||1080);
     if(!floor||!floor.index)return null;
     hls.capLevelToPlayerSize=false;
     hls.config.minAutoBitrate=hls.levels[floor.index].maxBitrate||floor.bitrate;
@@ -325,6 +323,19 @@
     return floor;
   }
   function syncQuality(){if(hls&&hls.autoLevelEnabled===true)selectedQuality=0;}
+  function qualityKey(){var e=episodes[episodeIndex],v=e&&e.variants&&e.variants[audioSelection()];return episodeIndex+':'+(v&&v.preferenceKey||audioSelection());}
+  function availableQualities(){
+    var current=qualityLevels(),entry=qualityLookups[qualityKey()],seen={};current.forEach(function(level){seen[level.height]=true;});
+    return current.concat((entry&&entry.levels||[]).filter(function(level){return !seen[level.height]&&(WePlayTV.name!=='android'||level.rawHeight>=144);})).sort(function(a,b){return a.height-b.height;});
+  }
+  function loadAdditionalQuality(){
+    if(!options.loadQualities)return;
+    var key=qualityKey(),old=qualityLookups[key];if(old&&Date.now()-old.at<60000)return;
+    var owner=options,e=episodes[episodeIndex],index=audioSelection(),entry={at:Date.now(),levels:old&&old.levels||[],loading:true};qualityLookups[key]=entry;
+    Promise.resolve().then(function(){return owner.loadQualities(e,index);}).then(function(levels){entry.levels=levels;},function(){}).then(function(){
+      entry.loading=false;if(active&&options===owner&&qualityKey()===key){refreshQuality();if(menu&&menu.getAttribute('data-menu-kind')==='quality')put(menu.querySelector('.native-menu-context'),options.title||'');}
+    });
+  }
   function qualityCaption(size,levels){
     var actual=WePlayQuality.height(size),current=actual?actual+'p':'';
     if(!levels.length)return current?current+' · выбор недоступен':'Качество задаёт источник';
@@ -332,24 +343,29 @@
     return selectedQuality+'p'+(actual&&actual!==selectedQuality?' · сейчас '+current:'');
   }
   function settingsItems(size){size=size||currentResolution();var levels=qualityLevels(),tracks=hls&&hls.subtitleTracks||[],selected=tracks[hls&&hls.subtitleTrack];return [
-    {label:'Качество',caption:qualityCaption(size,levels),value:'quality',drilldown:true,disabled:!levels.length},
+    {label:'Качество',caption:qualityCaption(size,levels),value:'quality',drilldown:true,disabled:!hls||!levels.length&&!options.loadQualities},
     {label:'Субтитры',caption:tracks.length?(selected?selected.name||selected.lang||'Включены':'Выключены'):'Недоступны для этого видео',value:'subtitles',drilldown:true,disabled:!tracks.length}
   ];}
   function showSettings(focusValue){if(preview)finishSeek(false);syncQuality();barSelection='native-settings';choose('Настройки',settingsItems(),function(value){if(value==='quality')chooseQuality();else chooseSubtitles();},null,{kind:'settings',focusValue:focusValue});}
   function refreshSettings(size){if(!menu||menu.getAttribute('data-menu-kind')!=='settings')return;var focused=document.activeElement;settingsItems(size).forEach(function(item){var row=menu.querySelector('[data-setting="'+item.value+'"]');if(row){row.disabled=!!item.disabled;put(row.querySelector('.native-choice-caption'),item.caption);}});buttons=Array.prototype.filter.call(menu.querySelectorAll('.native-choice'),function(b){return !b.disabled;});var at=buttons.indexOf(focused);if(at>=0)menuIndex=at;else if(focused!==menuClose&&menu.contains(focused))WePlayFocus.focus(buttons[0]||menuClose);}
   function refreshQuality(){
     if(!menu||menu.getAttribute('data-menu-kind')!=='quality')return;
-    var levels=qualityLevels();menu.querySelectorAll('[data-quality]').forEach(function(row){var height=Number(row.getAttribute('data-quality')),selected=height===selectedQuality;var disabled=height>0&&!levels.some(function(level){return level.height===height;});if(row.disabled!==disabled)row.disabled=disabled;if(row.getAttribute('aria-pressed')!==String(selected)){row.classList.toggle('selected',selected);row.setAttribute('aria-pressed',String(selected));row.querySelector('.native-choice-check').innerHTML=selected?playerIcon('check')||'✓':'';}});
+    var levels=availableQualities(),rows=Array.prototype.slice.call(menu.querySelectorAll('[data-quality]')),expected=[0].concat(levels.slice().reverse().map(function(level){return level.height;}));
+    if(rows.map(function(row){return Number(row.getAttribute('data-quality'));}).join(',')!==expected.join(',')){
+      var focused=document.activeElement===menuClose?'close':document.activeElement&&document.activeElement.getAttribute('data-quality'),top=menu.querySelector('.native-menu-scroll').scrollTop;chooseQuality();var restored=focused==='close'?menuClose:menu&&menu.querySelector('[data-quality="'+focused+'"]');if(restored){WePlayFocus.focus(restored);menuIndex=Math.max(0,buttons.indexOf(restored));}menu.querySelector('.native-menu-scroll').scrollTop=top;return;
+    }
+    rows.forEach(function(row){var height=Number(row.getAttribute('data-quality')),selected=height===selectedQuality;var disabled=height>0&&!levels.some(function(level){return level.height===height;});if(row.disabled!==disabled)row.disabled=disabled;if(row.getAttribute('aria-pressed')!==String(selected)){row.classList.toggle('selected',selected);row.setAttribute('aria-pressed',String(selected));row.querySelector('.native-choice-check').innerHTML=selected?playerIcon('check')||'✓':'';}});
     buttons=Array.prototype.filter.call(menu.querySelectorAll('.native-choice'),function(b){return !b.disabled;});var at=buttons.indexOf(document.activeElement);if(at>=0)menuIndex=at;else if(document.activeElement!==menuClose&&menu.contains(document.activeElement))WePlayFocus.focus(buttons[0]||menuClose);
   }
   function chooseQuality(){
-    syncQuality();if(!hls||!qualityLevels().length){showSettings('quality');return;}
-    var fixedAuto=hls.config.minAutoBitrate>0;
+    syncQuality();if(!hls){showSettings('quality');return;}loadAdditionalQuality();
+    var fixedAuto=hls&&hls.config.minAutoBitrate>0;
     var choices=[{label:'Автоматически',caption:fixedAuto?'': 'Подстраивается под скорость интернета',value:0,active:!selectedQuality}];
-    qualityLevels().slice().reverse().forEach(function(level){choices.push({label:level.height+'p',caption:WePlayQuality.description(level),value:level.height,active:selectedQuality===level.height});});
+    availableQualities().slice().reverse().forEach(function(level){choices.push({label:level.height+'p',caption:WePlayQuality.description(level),value:level.height,active:selectedQuality===level.height});});
     choose('Качество видео',choices,function(height){
-      if(!hls)return;var level=height&&qualityLevels().filter(function(candidate){return candidate.height===height;})[0];if(height&&!level){chooseQuality();return;}
-      var restart=fixedAuto&&height!==selectedQuality;
+      var local=qualityLevels(),all=availableQualities(),level=height&&local.filter(function(candidate){return candidate.height===height;})[0];if(height&&!all.some(function(candidate){return candidate.height===height;})){chooseQuality();return;}
+      preferBestQuality=!height&&!!options.loadQualities&&all.length>0&&(!local.length||all[all.length-1].height>local[local.length-1].height);
+      var restart=!hls||!!height&&!level||fixedAuto&&height!==selectedQuality||preferBestQuality;
       qualityPreference=selectedQuality=height;
       try{localStorage.setItem('lord.quality.v1',String(qualityPreference));}catch(ignore){}
       if(restart)startEpisode(resumeTarget||currentTime,wantsPlay,'native-settings');
@@ -360,6 +376,7 @@
       }
       report('qualitySelected',qualityPreference||'auto');
     },function(){showSettings('quality');},{kind:'quality'});
+    var lookup=qualityLookups[qualityKey()];if(lookup&&lookup.loading)put(menu.querySelector('.native-menu-context'),'Проверяем доступное качество…');
   }
   function chooseSubtitles(){
     var tracks=hls&&hls.subtitleTracks||[];if(!tracks.length){showSettings('subtitles');return;}var choices=[{label:'Выключены',value:-1,active:hls.subtitleTrack<0}];
@@ -386,7 +403,7 @@
       onWatch:function(next){saveProgress(true,true);runningEnded=true;if(next.kind==='episode'){episodeIndex=currentIndex+1;startEpisode(0,true);report('postplayEpisode',episodeIndex);}else if(options.onNextMedia)options.onNextMedia(next.item);}
     });
     watchAndroidBuffer(token);
-    if(options.resolveEpisode){var selectedVoice=e.variants[audioIndex],previousVoice=streamInfo&&streamInfo.voiceKey,retrySource=!!recovering||wasFailed&&selectedVoice&&previousVoice&&(selectedVoice.preferenceKey===previousVoice||(selectedVoice._preferenceKeys||[]).indexOf(previousVoice)>=0);options.resolveEpisode(e,audioIndex,{retry:retrySource,failedStreamKey:streamInfo&&streamInfo.streamKey}).then(function(stream){if(token===request&&!failed)startEngine(token,stream,position);}).catch(function(err){if(token===request&&!failed){if(WePlayTV.name==='android')androidFailure(token,'source');else error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');}});}
+    if(options.resolveEpisode){var selectedVoice=e.variants[audioIndex],previousVoice=streamInfo&&streamInfo.voiceKey,retrySource=!!recovering||wasFailed&&selectedVoice&&previousVoice&&(selectedVoice.preferenceKey===previousVoice||(selectedVoice._preferenceKeys||[]).indexOf(previousVoice)>=0),qualityRequest={quality:qualityPreference,bestQuality:preferBestQuality,excludeQualities:failedResolutions.slice(),retry:retrySource,failedStreamKey:streamInfo&&streamInfo.streamKey};preferBestQuality=false;options.resolveEpisode(e,audioIndex,qualityRequest).then(function(stream){if(token===request&&!failed)startEngine(token,stream,position);}).catch(function(err){if(token===request&&!failed){if(WePlayTV.name==='android')androidFailure(token,'source');else error(err.message||'Не удалось загрузить видео. Попробуйте ещё раз.');}});}
     else startEngine(token,e.hls,position);
   }
   function startEngine(token,stream,position){
@@ -532,7 +549,7 @@
     get active(){return active;},
     snapshot:function(){return {active:active,sourceId:streamInfo&&streamInfo.versionId||options&&options.sourceId,audioLoading:audioLoading,engine:hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:audioSelection(),audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekPreview:seekFrames&&seekFrames.snapshot(),seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack,postplay:postplay&&postplay.snapshot()};},
     start:function(html,opts){
-      this.close();options=opts;postplayDismissals={};episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
+      this.close();options=opts;postplayDismissals={};qualityLookups={};preferBestQuality=false;episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
       episodeIndex=opts.resume?WePlaySeasons.resumeIndex(episodes,opts.resume):opts.startSeason===undefined||opts.startSeason===null?0:WePlaySeasons.startIndex(episodes,opts.startSeason);
       if(episodeIndex<0)throw new Error(opts.resume?'Сохранённая серия недоступна в этом источнике.':'Выбранный сезон недоступен в этом источнике.');
       WePlayNetwork.setPlayback(true);audioSourcesRequested=false;

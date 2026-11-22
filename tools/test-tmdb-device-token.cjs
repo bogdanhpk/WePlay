@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const source=path.resolve(process.env.WEPLAY_APP_SOURCE||path.join(__dirname,'../app'));
+function app(settings,store=new Map(),quota=false){
+ const calls=[],c={URL,Date,Promise,console,WEPLAY_SETTINGS:settings,localStorage:{getItem:key=>{if(quota)throw Error('storage unavailable');return store.get(key)||null;},setItem:(key,value)=>{if(quota)throw Error('storage full');store.set(key,value);}},WePlayCatalogUnion:{kind:()=> 'movie',fields:item=>item.xfields||{},identifiers:item=>({tmdb:item.xfields.tmdb_id}),normal:value=>String(value||'').toLowerCase()},WePlayWebCatalog:{cleanTitle:value=>value},WePlayNetwork:{request:async(url,init)=>{calls.push({url,init});return{id:194,title:'Amelie',original_title:'Amelie',release_date:'2001-04-25',imdb_id:'tt0211915',poster_path:'/Poster.jpg',backdrop_path:'/Landscape.jpg',images:{backdrops:[{file_path:'/Landscape.jpg',width:1920,height:1080}],logos:[{file_path:'/Title.png',width:800,height:240,iso_639_1:'en'}]},credits:{cast:[]}};}}};c.window=c;vm.createContext(c);vm.runInContext(fs.readFileSync(path.join(source,'tmdb.js'),'utf8'),c);return{tmdb:c.WePlayTMDB,store,calls};
+}
+const item={id:'pub-990002',title:'Amelie',_kind:'movie',xfields:{year:'2001',tmdb_id:'194',original_title:'Amelie'}},fixture='fixture.read.token';
+(async()=>{
+ const personal=app({tmdbReadToken:'  '+fixture+'  '}),art=await personal.tmdb.artwork(item);assert.ok(art.background);assert.ok(art.titleLogos.length);assert.equal(personal.store.get('weplay.tmdb.read-token.v1'),fixture);
+ const updated=app({tmdbReadToken:''},personal.store);assert.ok(updated.tmdb.available());await updated.tmdb.artwork(item);assert.equal(updated.calls[0].init.headers.Authorization,'Bearer '+fixture);assert.equal(updated.store.get('weplay.tmdb.read-token.v1'),fixture);
+ for(const {url,init} of [...personal.calls,...updated.calls]){assert.equal(new URL(url).hostname,'api.themoviedb.org');assert.ok(!url.includes(fixture));assert.equal(init.credentials,'omit');}assert.ok(!JSON.stringify(art).includes(fixture));
+ const empty=app({tmdbReadToken:''});assert.equal(empty.tmdb.available(),false);await assert.rejects(empty.tmdb.artwork(item));assert.equal(empty.calls.length,0);
+ const full=app({tmdbReadToken:fixture},new Map(),true);await full.tmdb.artwork(item);assert.equal(full.calls[0].init.headers.Authorization,'Bearer '+fixture);
+ console.log(JSON.stringify({result:'PASS',checks:['personal settings seed device-local TMDB access','later public APKs preserve the device token','credentials only go to the official API Authorization header','public images and returned metadata contain no credentials','empty public settings do not erase stored access','personal access still works when local storage cannot be written']}));
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -1,0 +1,4 @@
+{
+  "signed": "{\"schema\":1,\"app\":\"LordKim001.LordTV\",\"channel\":\"stable\",\"version\":\"1.22.84\",\"sequence\":100220084,\"minShell\":1,\"createdAt\":\"2026-11-22T07:35:11.590Z\",\"payload\":{\"path\":\"releases/1.22.84/bundle.json\",\"sha256\":\"af68634d650bf12e6d6b915c4fc4db8e1b8be3e0600c0b9592b6b1d626203094\",\"bytes\":2244410}}",
+  "signature": "1RU9L38dmOxYYkex2nkLVQstjY239EqTHIVlk8IlnTYV77yC/QI39f7mUnmVZkawN2kKg8mUjZTo1wIkACv1/g=="
+}
