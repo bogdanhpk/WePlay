@@ -1,8 +1,8 @@
 # WePlay для Android TV
 
-Android TV / Google TV 8.0 и новее, Android System WebView. Версия **1.0.51**: встроенный интерфейс, пульт, системный Media3-плеер и запасной HTML5/HLS-плеер и уведомления о новых APK из GitHub. 
+Android TV / Google TV 8.0 и новее, Android System WebView. Версия **1.0.52**: встроенный интерфейс, пульт, системный Media3-плеер и запасной HTML5/HLS-плеер и уведомления о новых APK из GitHub. 
 
-[Скачать APK 1.0.51](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.51.apk) · [Установка](https://github.com/bogdanhpk/WePlay/blob/main/docs/INSTALL_ANDROID_TV.md)
+[Скачать APK 1.0.52](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.52.apk) · [Установка](https://github.com/bogdanhpk/WePlay/blob/main/docs/INSTALL_ANDROID_TV.md)
 
 ## Обновления
 
@@ -72,3 +72,7 @@ node tools/test-updates.cjs emulator-5556
 ```sh
 node tools/test-native-video.cjs
 ```
+
+## Поиск максимального качества
+
+С версии 1.0.52 общий модуль для Android, Tizen и webOS проверяет HLS и прямые MP4-варианты одной озвучки, включая 4K. «Авто» продолжает поиск после запуска и может перейти на найденный лучший источник с сохранением позиции. Ручное качество сохраняется. [Как определяется качество](../docs/PLAYBACK_QUALITY.md).

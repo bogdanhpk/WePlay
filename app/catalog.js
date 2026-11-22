@@ -6,7 +6,7 @@
     {id:'vc',name:'lordfilm.vc',base:'https://lordfilm.vc/',layout:'re'},
     {id:'st',name:'lordfilm.st',base:'https://lordfilm.st/',pending:true,note:'Сайт ограничивает автоматическое подключение'}];
   var union=window.WePlayCatalogUnion,feeds={},categoryGroups={};
-  var playerPending={},kindPending={},seasonPending={},seasonCache={},detailPending={},detailChecked={};
+  var playerPending={},kindPending={},seasonPending={},seasonCache={},detailPending={},detailChecked={},qualityCache={};
   var mode='auto',active=null,selecting=null,epoch=0,offline=false,index={},paths={},memory={},pending={},stored={},health={},checked={};
   var STORE='lord.catalog-cache.v1',MODE='lord.catalog-mode.v1',LAST='lord.catalog-last.v1';
   try{var disk=JSON.parse(localStorage.getItem(STORE)||'{}');stored=disk.entries||{};}catch(ignore){}
@@ -333,7 +333,7 @@
       var extra=playbackChoices(item,preferred).filter(function(v){return !attempted[String(v.id)];});if(extra.length){var start=choices.length;choices=choices.concat(extra);return next(start);}
       if(!preferred&&!discovered){discovered=true;return fullDetail(item.id,media).then(function(){return next(choices.length);},function(){throw last||new Error('Вариант просмотра недоступен.');});}
       return Promise.reject(last||new Error('Вариант просмотра недоступен.'));
-    }attempted[String(choices[i].id)]=true;return rawDetail(choices[i],false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){var episodes=WePlayNativePlayer.parse(resolved.payload);if(resume&&WePlaySeasons.resumeIndex(episodes,resume)<0)throw new Error('Сохранённая серия недоступна в этом источнике.');if(season!==undefined&&season!==null&&WePlaySeasons.startIndex(episodes,season)<0)throw new Error('Выбранный сезон недоступен в этом источнике.');resolved=Object.assign({},resolved,{source:choices[i]._source||'primary',versionId:String(choices[i].id)});var named=episodes.some(function(e){return e.audio&&Array.isArray(e.audio.names)&&e.audio.names.some(function(label){return typeof label==='string'&&label.trim()&&label.trim().toLowerCase()!=='delete';});});return choices.length>1||resolved.resolveEpisode||named?combinedPlayback(choices,resolved,attempted,media,!preferred):resolved;}).catch(function(e){last=e;return next(i+1);});}
+    }attempted[String(choices[i].id)]=true;return rawDetail(choices[i],false,false,false,media).then(function(full){return playerData(full,media);}).then(function(resolved){var episodes=WePlayNativePlayer.parse(resolved.payload);if(resume&&WePlaySeasons.resumeIndex(episodes,resume)<0)throw new Error('Сохранённая серия недоступна в этом источнике.');if(season!==undefined&&season!==null&&WePlaySeasons.startIndex(episodes,season)<0)throw new Error('Выбранный сезон недоступен в этом источнике.');resolved=Object.assign({},resolved,{source:choices[i]._source||'primary',versionId:String(choices[i].id)});var named=episodes.some(function(e){return e.audio&&Array.isArray(e.audio.names)&&e.audio.names.some(function(label){return typeof label==='string'&&label.trim()&&label.trim().toLowerCase()!=='delete';});});return !preferred||choices.length>1||resolved.resolveEpisode||named?combinedPlayback(choices,resolved,attempted,media,!preferred):resolved;}).catch(function(e){last=e;return next(i+1);});}
     return next(0);
   }
   function combinedPlayback(choices,initial,attempted,media,discover){
@@ -374,14 +374,19 @@
     }
     function streamFor(row,variant){
       var play=row.resolved,names=row.episode.audio&&row.episode.audio.names||[];
-      return Promise.resolve().then(function(){return play.resolveEpisode?play.resolveEpisode(row.episode,row.track):{url:row.episode.hls,audioTrack:row.track,audioLabel:String(names[row.track]||variant.label).replace(/\s+/g,' ').trim(),audioNames:names};}).then(function(stream){
+      return Promise.resolve().then(function(){return play.resolveEpisode?play.resolveEpisode(row.episode,row.track,{media:media}):{url:row.episode.hls,audioTrack:row.track,audioLabel:String(names[row.track]||variant.label).replace(/\s+/g,' ').trim(),audioNames:names};}).then(function(stream){
         var raw=typeof stream==='string'?stream:stream&&stream.url;if(!/^https?:\/\//.test(raw||''))throw new Error('Некорректный адрес видео.');
         var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);return Object.assign({},typeof stream==='string'?{url:stream}:stream,{voiceKey:variant.preferenceKey,streamKey:row.streamKey,seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
       });
     }
     function inspect(row,variant){
+      var key=epoch+'|'+(row.resolved.transport||'')+'|'+row.streamKey,cached=qualityCache[key];
+      if(cached&&Date.now()-cached.at<60000)return Promise.resolve({row:row,stream:Object.assign({},cached.stream,{voiceKey:variant.preferenceKey,versionId:String(row.record.id)}),levels:cached.levels});
       if(row.qualityTask&&Date.now()-row.qualityAt<120000)return row.qualityTask;
-      row.qualityAt=Date.now();row.qualityTask=streamFor(row,variant).then(function(stream){return WePlayQuality.probe(stream).catch(function(){return [];}).then(function(levels){return{row:row,stream:stream,levels:levels};});}).catch(function(error){row.qualityTask=null;throw error;});return row.qualityTask;
+      row.qualityAt=Date.now();row.qualityTask=streamFor(row,variant).then(function(stream){return WePlayQuality.probe(stream,{media:media}).then(function(levels){
+        if(levels.length&&!levels.partial){qualityCache[key]={at:Date.now(),stream:stream,levels:levels};var keys=Object.keys(qualityCache).sort(function(a,b){return qualityCache[a].at-qualityCache[b].at;});while(keys.length>64)delete qualityCache[keys.shift()];}else row.qualityTask=null;
+        return{row:row,stream:stream,levels:levels};
+      });}).catch(function(error){row.qualityTask=null;throw error;});return row.qualityTask;
     }
     function inspectAll(routes,variant,budget){
       var at=0,records=[],expired=false,timer;function worker(){var row=!expired&&routes[at++];if(!row)return Promise.resolve();return inspect(row,variant).then(function(record){records.push(record);},function(){}).then(worker);}
@@ -392,6 +397,10 @@
     function qualityScore(record,target,excluded){
       var available=record.levels.filter(function(level){return !excluded||excluded.indexOf(level.height)<0;}),chosen=target?WePlayQuality.preferred(available,target):available[available.length-1];
       if(!chosen)return 0;return target&&chosen.height>target?1:chosen.height;
+    }
+    function selectedStream(record,target,excluded){
+      var available=record.levels.filter(function(level){return !excluded||excluded.indexOf(level.height)<0;}),chosen=target?WePlayQuality.preferred(available,target):available[available.length-1];
+      return Object.assign({},record.stream,chosen&&chosen.url?{url:chosen.url,format:chosen.format}:{},{qualities:record.levels,verifiedQuality:chosen&&chosen.height||0});
     }
     var result={payload:{episodes:episodes},source:initial.source,versionId:initial.versionId,
       resolveEpisode:function(e,index,retry){
@@ -404,21 +413,28 @@
           }).catch(function(error){return next(at+1,error);});
         }
         if(!window.WePlayQuality||!retry||retry.quality===undefined||retry.retry)return next(0);
-        var target=Number(retry.quality)||0,excluded=retry.excludeQualities||[];
-        return inspect(routes[0],variant).catch(function(){return null;}).then(function(first){
-          var score=first&&qualityScore(first,target,excluded);
-          if(first&&!retry.bestQuality&&(target?score===target:score>=1080))return first;
-          // Only already known catalog alternatives participate in startup. Exhaustive
-          // discovery belongs to the quality menu, so slow searches cannot hold video.
-          var timer;return Promise.race([loadKnown(),new Promise(function(done){timer=setTimeout(done,900);})]).then(function(){clearTimeout(timer);variant=WePlayAudio.root(e.variants[index]);routes=variant._sources.slice();return inspectAll(routes,variant,2000);}).then(function(records){
-            records.sort(function(a,b){return qualityScore(b,target,excluded)-qualityScore(a,target,excluded)||routes.indexOf(a.row)-routes.indexOf(b.row);});return records[0]||first;
-          });
-        }).then(function(chosen){if(!chosen)return next(0);variant._activeSource=chosen.row;return chosen.stream;});
-      },
-      loadQualities:function(e,index){
-        return result.loadSources().then(function(){var variant=WePlayAudio.root(e.variants[index]);return variant?inspectAll(variant._sources.slice(),variant):[];}).then(function(records){
-          var raw=[];records.forEach(function(record){record.levels.forEach(function(level){raw.push({width:level.width,height:level.rawHeight,bitrate:level.bitrate});});});return WePlayQuality.levels(raw);
+        var target=Number(retry.quality)||0,excluded=retry.excludeQualities||[],deadline=Date.now()+2000,first;
+        inspect(routes[0],variant).then(function(record){first=record;},function(){});
+        // Auto compares all known routes, including alternatives above Full HD. The
+        // metadata budget is shared by the first source and its alternatives.
+        var timer;return Promise.race([loadKnown(),new Promise(function(done){timer=setTimeout(done,900);})]).then(function(){
+          clearTimeout(timer);variant=WePlayAudio.root(e.variants[index]);routes=variant._sources.slice();if(selected&&routes.indexOf(selected)>=0)routes=[selected].concat(routes.filter(function(row){return row!==selected;}));return inspectAll(routes,variant,Math.max(1,deadline-Date.now()));
+        }).then(function(records){
+          records.sort(function(a,b){return qualityScore(b,target,excluded)-qualityScore(a,target,excluded)||routes.indexOf(a.row)-routes.indexOf(b.row);});var chosen=records[0]||first;
+          if(!chosen)return next(0);variant._activeSource=chosen.row;return selectedStream(chosen,target,excluded);
         });
+      },
+      loadQualities:function(e,index,onUpdate){
+        var queued=[],seen={},records=[],running=0,finished=false,incomplete=false,complete;
+        function verified(){var raw=[];records.forEach(function(record){record.levels.forEach(function(level){raw.push({width:level.width,height:level.rawHeight,bitrate:level.bitrate});});});var levels=WePlayQuality.levels(raw);levels.partial=!finished||incomplete||records.some(function(record){return record.levels.partial;});return levels;}
+        function drain(){
+          while(running<2&&queued.length){var row=queued.shift();running++;(function(row){var variant=WePlayAudio.root(e.variants[index]);inspect(row,variant).then(function(record){records.push(record);if(onUpdate)onUpdate(verified());},function(){incomplete=true;}).catch(function(){}).then(function(){running--;drain();});})(row);}
+          if(finished&&!running&&!queued.length)complete(verified());
+        }
+        function update(){var variant=WePlayAudio.root(e.variants[index]);if(variant)variant._sources.forEach(function(row){if(!seen[row.streamKey]){seen[row.streamKey]=true;queued.push(row);}});drain();}
+        var task=new Promise(function(done){complete=done;});listeners.push(update);update();
+        Promise.resolve(result.loadSources?result.loadSources():null).catch(function(){}).then(function(){finished=true;update();});
+        return task.finally(function(){var at=listeners.indexOf(update);if(at>=0)listeners.splice(at,1);});
       },
       loadSources:function(onUpdate){
         if(onUpdate)listeners.push(onUpdate);
@@ -436,6 +452,10 @@
       var episode=episodes[at],audio=episode.audio||{},order=resolved.resolveEpisode?[]:audio.order||[],names=resolved.resolveEpisode?(episode.variants||[]).filter(function(v){return !v._duplicateOf;}).map(function(variant){return variant.label;}):audio.names||[];
       var rows=names.map(function(label,index){return{label:typeof label==='string'?label.replace(/\s+/g,' ').trim():'',index:index};}).filter(function(track){return track.label&&track.label.toLowerCase()!=='delete';}).sort(function(a,b){return (order[a.index]===undefined?a.index:order[a.index])-(order[b.index]===undefined?b.index:order[b.index]);});
       var labels=(resolved.resolveEpisode?rows:WePlayAudio.unique(rows)).map(function(track){return track.label;});
+      if(window.WePlayQuality&&resolved.loadQualities&&!WePlayNetwork.isPlayback()){
+        var label='',key='';try{label=localStorage.getItem('lord.audioPreference')||'';key=localStorage.getItem('weplay.audioSourcePreference')||'';}catch(ignore){}
+        var preferred=WePlayAudio.preferredIndex(episode.variants||[],label,key);resolved.loadQualities(episode,Math.max(0,preferred)).catch(function(){});
+      }
       return{labels:labels,source:resolved.source,versionId:resolved.versionId,season:episode.season,episode:episode.episode};
     });
   }
@@ -460,8 +480,14 @@
     }).then(function(runtime){return runtime||next(at+1);},function(){return next(at+1);});}
     return next(0);
   }
-  function videoSource(episode,variant){
-    var selected=episode.variants[variant]||episode.variants[0];return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(selected.vkId),true,'omit',12000,false,true).then(function(j){var src=j.sources||{},stream=src.hlsUrl||src.mpegHighUrl||src.mpegMediumUrl;if(!stream||!/^https:\/\//.test(stream))throw new Error('Видео пока недоступно. Попробуйте другую озвучку.');var preview=src.mpegTinyUrl||src.mpegLowestUrl;return {url:stream,format:src.hlsUrl?'hls':'mp4',seekPreview:preview&&/^https:\/\//.test(preview)?{type:'video',url:preview}:null};});
+  function videoSource(episode,variant,options){
+    var selected=episode.variants[variant]||episode.variants[0];return fetchData('https://plapi.cdnvideohub.com/api/v1/player/sv/video/'+encodeURIComponent(selected.vkId),true,'omit',12000,false,!options||options.media!==false).then(function(j){
+      // The provider can swap its 2K/4K fields. Verify those files independently;
+      // their names are never evidence of the actual resolution.
+      var src=j.sources||{},fields=[['mpeg4kUrl',0],['mpeg2kUrl',0],['mpegQhdUrl',0],['mpegFullHdUrl',1080],['mpegHighUrl',720],['mpegMediumUrl',480],['mpegLowUrl',360],['mpegLowestUrl',240],['mpegTinyUrl',144]],renditions=fields.filter(function(field){return /^https:\/\//.test(src[field[0]]||'');}).map(function(field){return{url:src[field[0]],format:'mp4',hint:field[1]};}),stream=src.hlsUrl||renditions[0]&&renditions[0].url;
+      if(!stream||!/^https:\/\//.test(stream))throw new Error('Видео пока недоступно. Попробуйте другую озвучку.');var preview=src.mpegTinyUrl||src.mpegLowestUrl;
+      return {url:stream,format:src.hlsUrl?'hls':'mp4',renditions:renditions,seekPreview:preview&&/^https:\/\//.test(preview)?{type:'video',url:preview}:null};
+    });
   }
   function playerFrom(item,media){
     if(!item._video)return Promise.resolve().then(function(){return fetchData(playerURL(item),false,'omit',12000,false,media);}).then(function(html){return{payload:html};});
