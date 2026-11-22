@@ -28,6 +28,18 @@ final class NetworkTransport {
     private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER);
     NetworkTransport(String userAgent) { this.userAgent = userAgent; }
 
+    WebResourceResponse media(String url, Map<String,String> headers) {
+        Uri route = Uri.parse(MainActivity.ORIGIN + "/network?url=" + Uri.encode(url) + "&credentials=omit");
+        return load(new WebResourceRequest() {
+            @Override public Uri getUrl() { return route; }
+            @Override public boolean isForMainFrame() { return false; }
+            @Override public boolean isRedirect() { return false; }
+            @Override public boolean hasGesture() { return false; }
+            @Override public String getMethod() { return "GET"; }
+            @Override public Map<String,String> getRequestHeaders() { return headers; }
+        });
+    }
+
     private byte[] catalogSearch(URL url, String raw) throws Exception {
         if (!url.getHost().matches("lordfilm26-kino[0-9]+\\.lat") ||
             !url.getPath().equals("/engine/ajax/controller.php") || !"mod=media_catalog".equals(url.getQuery()) || raw.length() > 1024)

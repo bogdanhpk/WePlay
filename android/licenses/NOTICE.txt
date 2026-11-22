@@ -7,3 +7,7 @@ Apache License 2.0. See hls.js-NOTICE.txt and Apache-2.0.txt.
 AndroidX WebKit and AndroidX dependencies — Copyright The Android Open Source Project.
 https://developer.android.com/jetpack/androidx/releases/webkit
 Apache License 2.0. See Apache-2.0.txt.
+
+AndroidX Media3 (ExoPlayer, HLS and UI) 1.8.1 — Copyright The Android Open Source Project.
+https://github.com/androidx/media
+Apache License 2.0. See Apache-2.0.txt.

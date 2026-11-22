@@ -12,9 +12,9 @@ let html=fs.readFileSync(path.join(source,'app.html'),'utf8');
 html=html.replace(/\s*<script src="\$WEBAPIS[^>]+><\/script>/,'')
   .replace('width=1920, initial-scale=1','width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
   .replace('Samsung Tizen','Android TV').replace('weplay-icon.png','weplay-icon-orange.png')
-  .replace('<script src="settings.js"></script>','<script src="android.js"></script>\n  <script src="settings.js"></script>');
+  .replace('<script src="settings.js"></script>','<script src="android.js"></script>\n  <script src="android-video.js"></script>\n  <script src="settings.js"></script>');
 fs.mkdirSync(target,{recursive:true});
-const files=new Set(Array.from(html.matchAll(/(?:src|href)="([^"$]+\.(?:js|css|png))"/g),m=>m[1]).filter(p=>p!=='android.js'&&p!=='settings.js'));
+const files=new Set(Array.from(html.matchAll(/(?:src|href)="([^"$]+\.(?:js|css|png))"/g),m=>m[1]).filter(p=>p!=='android.js'&&p!=='android-video.js'&&p!=='settings.js'));
 for(const dir of ['assets','fonts','vendor']){
   function walk(rel){for(const entry of fs.readdirSync(path.join(source,rel),{withFileTypes:true})){const item=rel+'/'+entry.name;if(entry.isDirectory())walk(item);else files.add(item);}}
   walk(dir);
@@ -27,6 +27,7 @@ for(const file of files){
   fs.writeFileSync(destination,bytes);
 }
 fs.copyFileSync(path.join(root,'platform/android.js'),path.join(target,'android.js'));
+fs.copyFileSync(path.join(root,'platform/android-video.js'),path.join(target,'android-video.js'));
 // Personal credentials are opt-in for a local build; the default APK stays public.
 const personalSettings=process.env.WEPLAY_PERSONAL_TMDB_SETTINGS;let readToken='';
 if(personalSettings){const input=JSON.parse(fs.readFileSync(path.resolve(personalSettings),'utf8'));readToken=String(input.tmdbReadToken||input.readToken||'').trim();if(!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}$/.test(readToken))throw Error('Expected a TMDB read-access token in personal settings');}
@@ -34,7 +35,7 @@ fs.writeFileSync(path.join(target,'settings.js'),'window.WEPLAY_SETTINGS = '+JSO
 fs.writeFileSync(path.join(target,'index.html'),html);
 fs.cpSync(path.join(root,'licenses'),path.join(target,'licenses'),{recursive:true});
 const manifest={platform:'android-tv',version:version.versionName,interfaceVersion:version.interfaceVersion,files:[]};
-for(const file of [...files,'settings.js','android.js','index.html',...fs.readdirSync(path.join(root,'licenses')).map(name=>'licenses/'+name)].sort()){
+for(const file of [...files,'settings.js','android.js','android-video.js','index.html',...fs.readdirSync(path.join(root,'licenses')).map(name=>'licenses/'+name)].sort()){
   const bytes=fs.readFileSync(path.join(target,file));manifest.files.push({path:file,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});
 }
 fs.writeFileSync(path.join(root,'web-manifest.json'),JSON.stringify(manifest,null,2)+'\n');

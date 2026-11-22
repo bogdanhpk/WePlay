@@ -11,6 +11,7 @@ import android.util.Base64;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.webkit.WebChromeClient;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
@@ -31,6 +32,7 @@ public final class MainActivity extends Activity {
     private boolean ready;
     private boolean resumed, waitingPermission;
     private ApkUpdates updates;
+    private VideoPlayback nativeVideo;
     private static final int UPDATE_PERMISSION = 71, UPDATE_INSTALL = 72;
 
     @Override public void onCreate(Bundle state) {
@@ -104,7 +106,18 @@ public final class MainActivity extends Activity {
                 if (updates != null) updates.status();
             }
         });
-        setContentView(web);
+        FrameLayout root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);
+        root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        nativeVideo = new VideoPlayback(this, root, network, new VideoPlayback.Listener() {
+            @Override public void state(JSONObject state) {
+                if (!localPage()) return;
+                String encoded = Base64.encodeToString(state.toString().getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
+                web.evaluateJavascript("window.WePlayAndroidVideo&&WePlayAndroidVideo.receive(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob('" + encoded + "'),function(c){return c.charCodeAt(0);}))))", null);
+            }
+            @Override public void visible(boolean visible) { if (web != null) web.setBackgroundColor(visible ? Color.TRANSPARENT : Color.BLACK); }
+        });
+        web.addJavascriptInterface(new VideoBridge(), "WePlayVideoBridge");
+        setContentView(root);
         web.loadUrl(ORIGIN + "/assets/weplay/index.html");
         web.requestFocus();
     }
@@ -137,6 +150,21 @@ public final class MainActivity extends Activity {
                     if (action.equals("check")) updates.check(false);
                     else if (action.equals("download")) updates.download();
                     else if (action.equals("install")) updates.install();
+                } catch (Exception ignored) { }
+            });
+        }
+    }
+
+    private final class VideoBridge {
+        @JavascriptInterface public void postMessage(String raw) {
+            if (raw == null || raw.length() > 16384) return;
+            runOnUiThread(() -> {
+                if (!localPage() || nativeVideo == null) return;
+                try {
+                    JSONObject data = new JSONObject(raw); int session = data.getInt("session"); String action = data.getString("action");
+                    if (session <= 0 || (!resumed && (action.equals("open") || action.equals("play")))) return;
+                    if (action.equals("open")) nativeVideo.open(session, data.optInt("sequence"), data.getString("url"), data.optLong("position"), data.optString("format"));
+                    else nativeVideo.command(session, action, data);
                 } catch (Exception ignored) { }
             });
         }
@@ -225,6 +253,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         resumed = false;
+        if (nativeVideo != null) nativeVideo.pause();
         if (web != null) {
             notifyForeground();
             web.onPause();
@@ -252,6 +281,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (updates != null) updates.close();
+        if (nativeVideo != null) { nativeVideo.release(); nativeVideo = null; }
         if (web != null) { web.destroy(); web = null; }
         super.onDestroy();
     }

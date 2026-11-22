@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const sent=[],classes=new Set(),events=[];
+const Hls={Events:{ERROR:'error',MANIFEST_PARSED:'manifest',AUDIO_TRACKS_UPDATED:'audio',SUBTITLE_TRACKS_UPDATED:'subs',LEVEL_SWITCHED:'level'},ErrorTypes:{NETWORK_ERROR:'network',MEDIA_ERROR:'media'}};
+const context={window:{},Hls,Event:class{constructor(type){this.type=type;}},performance:{now:()=>100},document:{documentElement:{classList:{add:x=>classes.add(x),remove:x=>classes.delete(x)}}},WePlayVideoBridge:{postMessage:json=>sent.push(JSON.parse(json))}};
+context.window.WePlayVideoBridge=context.WePlayVideoBridge;
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../platform/android-video.js'),'utf8'),context);
+const bridge=context.window.WePlayAndroidVideo,media={dispatchEvent:e=>events.push(e.type)};
+assert(bridge.supported({transport:'plain',url:'https://example.com/master.m3u8'}));
+assert(!bridge.supported({transport:'encoded',url:'https://example.com/encoded'}));
+const engine=bridge.create(media,{startPosition:32,nativeFormat:'hls'}),failures=[];let manifest=0;
+engine.on('manifest',()=>{manifest++;media.play();});engine.on('error',(event,data)=>failures.push(data));
+engine.loadSource('https://example.com/master.m3u8');
+let open=sent.at(-1);assert.equal(open.position,32000);assert.equal(open.action,'open');assert(classes.has('android-native-video'));assert(media.hidden);
+bridge.receive({session:open.session,sequence:1,event:'tracks',levels:[{width:1920,height:800}],audioTracks:[],subtitleTracks:[],state:2,position:32000});
+assert.equal(manifest,1);assert.equal(sent.at(-1).action,'play');assert(!media.paused);
+// A queued pre-play acknowledgement must never roll back an optimistic command.
+bridge.receive({session:open.session,sequence:1,event:'state',state:2,wantsPlay:false,position:0});assert(!media.paused);assert.equal(media.currentTime,32);
+bridge.receive({session:open.session,sequence:2,event:'frame',state:3,wantsPlay:true,playing:true,rendered:true,width:1920,height:800,duration:100000,position:33000,renderedFrames:24,droppedFrames:1});
+assert.equal(media.videoWidth,1920);assert.equal(media.duration,100);assert.equal(media.currentTime,33);assert.equal(events.filter(x=>x==='loadedmetadata').length,1);assert(events.includes('playing'));
+media.currentTime=45;assert.equal(sent.at(-1).position,45000);assert.equal(media.currentTime,45);
+bridge.receive({session:open.session,sequence:2,event:'state',position:34000});assert.equal(media.currentTime,45);
+bridge.receive({session:open.session,sequence:3,event:'state',position:45000});assert.equal(media.currentTime,45);
+engine.nextLevel=0;assert.equal(sent.at(-1).action,'quality');assert.equal(sent.at(-1).index,0);assert(!engine.autoLevelEnabled);
+engine.nextLevel=-1;assert(engine.autoLevelEnabled);assert.equal(sent.at(-1).index,-1);
+engine.subtitleTrack=0;assert.equal(sent.at(-1).action,'subtitle');engine.subtitleDisplay=false;assert.equal(sent.at(-1).index,-1);
+media.pause();const paused=sent.at(-1);assert(media.paused);assert.equal(paused.action,'pause');
+bridge.receive({session:open.session,sequence:paused.sequence-1,event:'state',wantsPlay:true});assert(media.paused);
+bridge.receive({session:open.session,event:'error',code:4001,fallback:true,message:'unsupported'});assert.equal(failures.at(-1).details,'nativeUnsupported');
+engine.destroy();assert.equal(sent.at(-1).action,'close');assert(!classes.has('android-native-video'));assert.equal(bridge.diagnostics(),null);
+const count=sent.length;media.pause();engine.destroy();assert.equal(sent.length,count);
+const secondMedia={dispatchEvent:()=>{}},second=bridge.create(secondMedia,{});second.loadSource('https://example.com/next.m3u8');
+bridge.receive({session:open.session,sequence:999,event:'state',position:90000});assert.equal(secondMedia.currentTime,0);
+bridge.block({transport:'plain',streamKey:'broken'});assert(!bridge.supported({transport:'plain',streamKey:'broken'}));
+assert(bridge.supported({transport:'plain',streamKey:'another'}));second.destroy();
+console.log('PASS: native playback acknowledgements, track selection, events, fallback and session cleanup');

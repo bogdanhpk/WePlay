@@ -142,7 +142,8 @@
     clearTimeout(prepareTimer);clearTimeout(bufferTimer);clearTimeout(stallTimer);clearTimeout(recoveryTimer);recoveryTimer=null;preview=null;remoteSeekKey=0;if(pointerCleanup)pointerCleanup();
     if(hls){hls.destroy();hls=null;}
     if(api){try{if(['PLAYING','PAUSED','READY'].indexOf(api.getState())>=0)api.stop();api.close();}catch(ignore){}}
-    if(video){video.pause();video.removeAttribute('src');video.load();video=null;}
+    if(video){video.pause();video.removeAttribute('src');video.load();video.remove();video=null;}
+    document.body.classList.remove('android-video-active');
   }
   function closeMenu(restore){if(menu)menu.remove();if(menuShade)menuShade.remove();menu=null;menuShade=null;menuClose=null;buttons=[];menuBack=null;if(settingsButton)settingsButton.setAttribute('aria-expanded','false');if(bar)bar.removeAttribute('aria-hidden');if(restore&&active)show(true);}
   function play(){
@@ -412,14 +413,16 @@
     if(seekFrames)seekFrames.source(streamInfo&&streamInfo.seekPreview||runningEpisode&&runningEpisode.seekPreview);
     var raw=typeof stream==='string'?stream:stream.url;
     var mp4=stream.format==='mp4'||stream.format!=='hls'&&/\.mp4(?:[?#]|$)/i.test(raw);
-    if(!mp4&&window.Hls&&Hls.isSupported()){
+    var nativeAndroid=WePlayTV.name==='android'&&window.WePlayAndroidVideo&&WePlayAndroidVideo.supported(streamInfo);
+    if(nativeAndroid||!mp4&&window.Hls&&Hls.isSupported()){
       var media=createVideo(token,0,true);
       var android=WePlayTV.name==='android';
-      hls=new Hls({loader:ProviderLoader,enableWorker:false,debug:false,autoStartLoad:!android,startLevel:0,startPosition:position/1000,capLevelToPlayerSize:true,backBufferLength:20,maxBufferLength:30,maxMaxBufferLength:60});
+      var config={loader:ProviderLoader,enableWorker:false,debug:false,autoStartLoad:!android,startLevel:0,startPosition:position/1000,capLevelToPlayerSize:true,backBufferLength:20,maxBufferLength:30,maxMaxBufferLength:60,nativeFormat:mp4?'mp4':'hls'};
+      hls=nativeAndroid?WePlayAndroidVideo.create(media,config):new Hls(config);
       hls.on(Hls.Events.MANIFEST_PARSED,function(ev,data){
         if(token!==request||failed)return;
         report('hlsReady',data.levels.length);
-        var dubStart=android?androidDubStartLevel():null;
+        var dubStart=android&&!nativeAndroid?androidDubStartLevel():null;
         var levels=qualityLevels(),chosen=WePlayQuality.preferred(levels,qualityPreference);
         if(failedResolutions.length){
           var usable=levels.filter(function(level){return failedResolutions.indexOf(level.height)<0;});
@@ -446,11 +449,14 @@
         if(token!==request||failed)return;
         report('hlsEvent',data.details+(data.response?' HTTP '+data.response.code:''));
         if(data.fatal){
+          if(nativeAndroid&&data.details==='nativeUnsupported'){
+            var at=resumeTarget||currentTime;WePlayAndroidVideo.block(streamInfo);report('androidNativeFallback','unsupported decoder');startEpisode(at,wantsPlay);return;
+          }
           if(WePlayTV.name==='android')androidFailure(token,data.type===Hls.ErrorTypes.MEDIA_ERROR?'decode':'network');
           else error('Не удалось загрузить видео. Попробуйте ещё раз.');
         }
       });
-      hls.attachMedia(media);hls.loadSource(raw);report('nativeStarted','HLS in application');
+      hls.attachMedia(media);hls.loadSource(raw);report('nativeStarted',nativeAndroid?'Media3 in application':'HLS in application');
     }else if(window.webapis&&webapis.avplay){
       document.body.classList.add('avplay-active');
       api=webapis.avplay;var object=el('object');object.type='application/avplayer';object.id='native-video';options.surface.appendChild(object);
@@ -490,7 +496,7 @@
       tick(currentTime);
     });
     ['durationchange','loadeddata','resize'].forEach(function(name){listen(name,function(){tick(currentTime);});});
-    listen('pause',function(){saveProgress(true);});
+    listen('pause',function(){if(hls&&hls.nativeMedia3&&!preview&&!suspended&&!loading){wantsPlay=false;updateControls();}saveProgress(true);});
     listen('timeupdate',function(){tick(media.currentTime*1000);});
     listen('playing',function(){
       if(failed||!WePlayTV.isForeground()||!wantsPlay||suspended||preview){pauseEngine();return;}
@@ -512,7 +518,12 @@
         androidFailure(token,media.error.code===3?'decode':'network');
       }else if(!managed)error('Не удалось загрузить видео. Попробуйте ещё раз.');
     });
-    options.surface.appendChild(media);
+    // A transformed ancestor makes Android composite decoded frames through the UI
+    // layer. Keep the movie at viewport size; only the controls use the TV UI scale.
+    if(WePlayTV.name==='android'){
+      document.body.classList.add('android-video-active');
+      document.body.appendChild(media);
+    }else options.surface.appendChild(media);
     return media;
   }
   function control(id,label,name,caption,action){
@@ -547,7 +558,7 @@
   window.WePlayNativePlayer={
     parse:parse,
     get active(){return active;},
-    snapshot:function(){return {active:active,sourceId:streamInfo&&streamInfo.versionId||options&&options.sourceId,audioLoading:audioLoading,engine:hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:audioSelection(),audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekPreview:seekFrames&&seekFrames.snapshot(),seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack,postplay:postplay&&postplay.snapshot()};},
+    snapshot:function(){return {active:active,sourceId:streamInfo&&streamInfo.versionId||options&&options.sourceId,audioLoading:audioLoading,engine:hls&&hls.nativeMedia3?'Media3':hls?'HLS':api?'AVPlay':'HTML5',state:state(),time:currentTime,duration:totalTime,episodes:episodes.length,episode:episodeIndex,season:episodes[episodeIndex]&&episodes[episodeIndex].season,episodeNumber:episodes[episodeIndex]&&episodes[episodeIndex].episode,audioTrack:audioSelection(),audioChoices:active?audioOptions():[],controls:!!bar&&!bar.hidden,controlsFocused:controlsFocused,menu:menu&&menu.querySelector('h2').textContent,suspended:suspended,seeking:!!preview,seekPreview:seekFrames&&seekFrames.snapshot(),seekTarget:preview&&preview.target,wantsPlay:wantsPlay,quality:selectedQuality||'auto',resolution:currentResolution(),subtitle:hls&&hls.subtitleTrack,postplay:postplay&&postplay.snapshot()};},
     start:function(html,opts){
       this.close();options=opts;postplayDismissals={};qualityLookups={};preferBestQuality=false;episodes=WePlaySeasons.ordered(parse(html));var clock=/\bunixTime\s*=\s*(\d+)/.exec(html);serverOffset=clock?Number(clock[1])*1000-Date.now():0;
       episodeIndex=opts.resume?WePlaySeasons.resumeIndex(episodes,opts.resume):opts.startSeason===undefined||opts.startSeason===null?0:WePlaySeasons.startIndex(episodes,opts.startSeason);
