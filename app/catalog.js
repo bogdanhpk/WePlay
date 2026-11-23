@@ -314,10 +314,28 @@
     if(params.do==='get'&&union.find(params.id))return mergedDetail(params.id);
     return singleApi(params).then(function(j){if(params.do!=='get'&&params.action!=='categories'){var d=j.data;if(Array.isArray(d))j=Object.assign({},j,{data:union.combine(d)});else j=Object.assign({},j,{data:Object.assign({},d,{items:union.combine(itemsOf(j))})});}return j;});
   }
-  function playbackChoices(item,preferred){var choices=versions(item);if(!preferred&&mode!=='auto'){var selected=choices.filter(function(v){return v._source===mode;});if(selected.length)choices=selected;}if(preferred){var chosen=choices.filter(function(v){return String(v.id)===String(preferred);})[0];choices=chosen?[chosen].concat(choices.filter(function(v){return v._source===chosen._source&&String(v.id)!==String(preferred);})):[];}return choices;}
+  function colorTitle(item){var id=union.identifiers(item).kp,known=!id&&union.find(item.id);return id||known&&union.identifiers(known).kp;}
+  function playbackChoices(item,preferred){
+    var choices=versions(item);
+    // This Mindhunter encode has green/magenta pixels already baked into the file.
+    // Seed its independently checked alternate even when a saved card has only the bad source.
+    if(!preferred&&colorTitle(item)==='958500'&&ready(source('lat'))){
+      var fallback={id:'lat-kp-958500',title:item.title||'Охотник за разумом',_source:'lat',_kind:'series',_kindVerified:'series',_kindVerifiedAt:Date.now(),_detail:true,xfields:{year:'2017',original_title:'Mindhunter',kinopoisk_id:'958500',film:'https://plapi.cdnvideohub.com/api/v1/player/sv/playlist'}};
+      remember(fallback);choices=versions(item);if(!choices.some(function(record){return record.id===fallback.id;}))choices.push(index[fallback.id]||fallback);
+    }
+    if(!preferred&&mode!=='auto'){var selected=choices.filter(function(v){return v._source===mode;});if(selected.length)choices=selected;}if(preferred){var chosen=choices.filter(function(v){return String(v.id)===String(preferred);})[0];choices=chosen?[chosen].concat(choices.filter(function(v){return v._source===chosen._source&&String(v.id)!==String(preferred);})):[];}return choices;
+  }
+  function badColorCopy(item,playback){
+    if(colorTitle(item)!=='958500'||typeof playback.payload!=='string')return false;
+    return WePlayNativePlayer.parse(playback.payload).some(function(episode){
+      try{return /^\/10_05_26\/10\/05\/(?:13|14)\/[^/]+\/[^/]+\.mp4\/master\.m3u8$/.test(new URL(episode.hls).pathname);}catch(ignore){return false;}
+    });
+  }
   function playerData(item,media){
     var v=item._video||{},key=String(item._source||'primary')+':'+item.id+':'+String(item.xfields&&item.xfields.film||'')+':'+[v.publisher,v.titleId,v.aggregator].join(':')+(media?'|media':'|background');
-    if(!playerPending[key])playerPending[key]=Promise.resolve().then(function(){return playerFrom(item,media);}).finally(function(){delete playerPending[key];});return playerPending[key];
+    if(!playerPending[key])playerPending[key]=Promise.resolve().then(function(){return playerFrom(item,media);}).then(function(playback){
+      if(badColorCopy(item,playback))throw new Error('У этой копии искажены цвета. Подключаем другой источник.');return playback;
+    }).finally(function(){delete playerPending[key];});return playerPending[key];
   }
   function seasons(item,preferred,force){
     var choices=playbackChoices(item,preferred),key=epoch+':'+String(preferred||'auto')+':'+choices.map(function(v){return(v._source||'primary')+':'+v.id;}).join('|'),entry=seasonCache[key];

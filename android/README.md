@@ -1,8 +1,8 @@
 # WePlay для Android TV
 
-Android TV / Google TV 8.0 и новее, Android System WebView. Версия **1.0.53**: встроенный интерфейс, пульт, системный Media3-плеер и запасной HTML5/HLS-плеер и уведомления о новых APK из GitHub. 
+Android TV / Google TV 8.0 и новее, Android System WebView. Версия **1.0.54**: встроенный интерфейс, пульт, системный Media3-плеер и запасной HTML5/HLS-плеер и уведомления о новых APK из GitHub. 
 
-[Скачать APK 1.0.53](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.53.apk) · [Установка](https://github.com/bogdanhpk/WePlay/blob/main/docs/INSTALL_ANDROID_TV.md)
+[Скачать APK 1.0.54](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.54.apk) · [Установка](https://github.com/bogdanhpk/WePlay/blob/main/docs/INSTALL_ANDROID_TV.md)
 
 ## Обновления
 
