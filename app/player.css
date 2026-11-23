@@ -1,4 +1,11 @@
 /* TV playback: separate title, timeline and actions, with a dedicated settings drawer. */
+#player .native-skip-intro{position:absolute;right:80px;bottom:80px;z-index:7;display:flex;align-items:center;justify-content:center;min-height:64px;padding:16px 24px;border:1px solid #777;border-radius:16px;background:#181818;color:#fff;font-family:inherit;font-size:24px;line-height:32px;font-weight:400;transition:background-color 200ms cubic-bezier(.32,.72,0,1),color 200ms cubic-bezier(.32,.72,0,1)}
+#player .native-skip-intro[hidden]{display:none}
+#player .native-skip-intro.native-skip-intro-raised{bottom:320px}
+#player .native-skip-intro:hover{background:#313131}
+#player .native-skip-intro:focus{background:#fff;color:#111;border-color:transparent;box-shadow:0 0 0 2px #181818,0 0 0 5px #fff}
+#player .native-skip-intro:active{transform:scale(.98)}
+@media(prefers-reduced-motion:reduce){#player .native-skip-intro{transition:none}}
 body.android-video-active #stage{z-index:1;background:transparent!important}
 body.android-video-active #player,body.android-video-active #player-surface{background:transparent!important}
 body.android-video-active #native-video{position:fixed;left:0;top:0;width:100%;height:100%;z-index:0;pointer-events:none}

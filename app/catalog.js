@@ -394,7 +394,7 @@
       var play=row.resolved,names=row.episode.audio&&row.episode.audio.names||[];
       return Promise.resolve().then(function(){return play.resolveEpisode?play.resolveEpisode(row.episode,row.track,{media:media}):{url:row.episode.hls,audioTrack:row.track,audioLabel:String(names[row.track]||variant.label).replace(/\s+/g,' ').trim(),audioNames:names};}).then(function(stream){
         var raw=typeof stream==='string'?stream:stream&&stream.url;if(!/^https?:\/\//.test(raw||''))throw new Error('Некорректный адрес видео.');
-        var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload);return Object.assign({},typeof stream==='string'?{url:stream}:stream,{voiceKey:variant.preferenceKey,streamKey:row.streamKey,seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
+        var clock=/\bunixTime\s*=\s*(\d+)/.exec(play.payload),intro=window.WePlayIntro&&(WePlayIntro.read(stream)||WePlayIntro.read(row.episode));return Object.assign({},typeof stream==='string'?{url:stream}:stream,{voiceKey:variant.preferenceKey,streamKey:row.streamKey,seekPreview:stream&&stream.seekPreview||row.episode.seekPreview,introRange:intro,transport:play.transport||'',versionId:String(row.record.id),serverTime:clock?Number(clock[1])*1000:null});
       });
     }
     function inspect(row,variant){
@@ -504,7 +504,7 @@
       // their names are never evidence of the actual resolution.
       var src=j.sources||{},fields=[['mpeg4kUrl',0],['mpeg2kUrl',0],['mpegQhdUrl',0],['mpegFullHdUrl',1080],['mpegHighUrl',720],['mpegMediumUrl',480],['mpegLowUrl',360],['mpegLowestUrl',240],['mpegTinyUrl',144]],renditions=fields.filter(function(field){return /^https:\/\//.test(src[field[0]]||'');}).map(function(field){return{url:src[field[0]],format:'mp4',hint:field[1]};}),stream=src.hlsUrl||renditions[0]&&renditions[0].url;
       if(!stream||!/^https:\/\//.test(stream))throw new Error('Видео пока недоступно. Попробуйте другую озвучку.');var preview=src.mpegTinyUrl||src.mpegLowestUrl;
-      return {url:stream,format:src.hlsUrl?'hls':'mp4',renditions:renditions,seekPreview:preview&&/^https:\/\//.test(preview)?{type:'video',url:preview}:null};
+      return {url:stream,format:src.hlsUrl?'hls':'mp4',renditions:renditions,introRange:window.WePlayIntro?WePlayIntro.read(j):null,seekPreview:preview&&/^https:\/\//.test(preview)?{type:'video',url:preview}:null};
     });
   }
   function playerFrom(item,media){

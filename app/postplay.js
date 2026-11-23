@@ -28,6 +28,7 @@
       var shouldShow=!!next&&!dismissed&&!moving&&!state.failed&&!state.blocked&&(ended||credits||near);
       if(!shouldShow){hide();return;}
       var entering=!visible;visible=true;root.hidden=false;root.classList.toggle('postplay-raised',!!options.controlsVisible());
+      if(entering&&next.kind==='episode')focus();
       if(ended&&!endFocused){endFocused=true;focus();}
       if(entering){root.classList.remove('postplay-ready');requestAnimationFrame(function(){if(!disposed&&visible)root.classList.add('postplay-ready');});}
       var automatic=(ended||credits)&&next.kind==='episode',allowed=state.autoplay!==false&&(ended||state.playing);

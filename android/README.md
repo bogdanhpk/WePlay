@@ -1,8 +1,8 @@
 # WePlay для Android TV
 
-Android TV / Google TV 8.0 и новее, Android System WebView. Версия **1.0.54**: встроенный интерфейс, пульт, системный Media3-плеер и запасной HTML5/HLS-плеер и уведомления о новых APK из GitHub. 
+Android TV / Google TV 8.0 и новее, Android System WebView. Версия **1.0.55**: встроенный интерфейс, пульт, системный Media3-плеер и запасной HTML5/HLS-плеер и уведомления о новых APK из GitHub. 
 
-[Скачать APK 1.0.54](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.54.apk) · [Установка](https://github.com/bogdanhpk/WePlay/blob/main/docs/INSTALL_ANDROID_TV.md)
+[Скачать APK 1.0.55](https://github.com/bogdanhpk/WePlay/raw/refs/heads/main/downloads/WePlay-AndroidTV-1.0.55.apk) · [Установка](https://github.com/bogdanhpk/WePlay/blob/main/docs/INSTALL_ANDROID_TV.md)
 
 ## Обновления
 
@@ -76,3 +76,7 @@ node tools/test-native-video.cjs
 ## Поиск максимального качества
 
 С версии 1.0.52 общий модуль для Android, Tizen и webOS проверяет HLS и прямые MP4-варианты одной озвучки, включая 4K. «Авто» продолжает поиск после запуска и может перейти на найденный лучший источник с сохранением позиции. Ручное качество сохраняется. [Как определяется качество](../docs/PLAYBACK_QUALITY.md).
+
+## Пропуск заставки
+
+С версии 1.0.55 во время заставки сериала появляется кнопка «Пропустить заставку» с обычным начертанием текста. Она сразу получает фокус: нажмите OK для пропуска. Карточка следующей серии тоже сразу получает фокус. [Отметки и управление](../docs/SKIP_INTRO.md).
