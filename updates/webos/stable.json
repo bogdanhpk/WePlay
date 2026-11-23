@@ -1,4 +1,4 @@
 {
-  "signed": "{\"schema\":1,\"app\":\"app.weplay.tv\",\"channel\":\"stable\",\"version\":\"1.0.44\",\"sequence\":100000044,\"minShell\":1,\"createdAt\":\"2026-11-23T16:51:37.281Z\",\"payload\":{\"path\":\"releases/1.0.44/bundle.json\",\"sha256\":\"b913bcc333e0af54340987d1fd72646b6d0c7434174f07d7e7b924d4806be956\",\"bytes\":2920349}}",
-  "signature": "HmhbdikuYs5zR8t4gVJYxLxdH1EPtn305vxebibzaW6A1oCiBLwl3lahdcB7XTzpr+kYrfbE72NP+0g4PN4pIA=="
+  "signed": "{\"schema\":1,\"app\":\"app.weplay.tv\",\"channel\":\"stable\",\"version\":\"1.0.45\",\"sequence\":100000045,\"minShell\":1,\"createdAt\":\"2026-11-23T18:03:00.316Z\",\"payload\":{\"path\":\"releases/1.0.45/bundle.json\",\"sha256\":\"1d767e09f847d3be06924e52a108f2351771e0799801d25e738a36339ab75897\",\"bytes\":2922052}}",
+  "signature": "3alTg/WoIPUWlj9RXoi6TgvAdUp286r2TkJinN2h93Lshmucmfy+hccXdXVyyrdjOIUgHi1re75ymcZLmIhGyg=="
 }

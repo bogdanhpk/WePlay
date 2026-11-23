@@ -61,18 +61,19 @@
     });
   }
   function listing(doc,s,params,h){
-    var links=h.list(doc,Number(params.category)===219&&!params.search?'#owl-top .media-tile__link[href]':'.media-tile__link[href]'),seen={},items=[],cursor=0,failed=false;
+    var links=h.list(doc,Number(params.category)===219&&!params.search?'#owl-top .media-tile__link[href]':'.media-tile__link[href]'),seen={},items=[],cursor=0;
     links.forEach(function(link){var href=h.pageURL(link.getAttribute('href'),s),id=href&&new URL(href).pathname.match(/^\/(\d+)\/?$/);if(!id||seen[id[1]])return;seen[id[1]]=true;items.push({id:s.id+'-'+id[1],_url:href,_source:s.id,_kind:Number(params.category)===13||Number(params.category)===36?'series':Number(params.category)===106||Number(params.category)===109?'movie':'',xfields:{}});});
     var additional=params.search&&s.searchPublisher&&doc.querySelector('#alloha-public-search .aps-form')?expanded(doc,s,params.search,h).then(function(rows){return{items:rows};},function(error){return{error:error};}):null;
     if(!items.length){if(additional)return additional.then(function(extra){if(extra.error)throw extra.error;return extra.items;});if(/ничего не найдено|поиск по сайту не дал|не найдено/i.test(h.text(doc.body)))return Promise.resolve([]);return Promise.reject(new Error('Не удалось прочитать раздел сайта.'));}
-    var result=new Array(items.length),failures=0;
-    function worker(){if(!h.current())return Promise.reject(new Error('Источник изменён.'));if(failed||cursor>=items.length)return Promise.resolve();var at=cursor++,item=items[at],cached=h.lookup(item.id);return (cached&&cached._detail?Promise.resolve(cached):detail(item,s,h)).then(function(full){result[at]=full;return worker();},function(error){if(h.search){failures++;return worker();}failed=true;throw error;});}
+    var result=new Array(items.length),failures=0,deadline=h.search?0:Date.now()+6500;
+    var helpers=deadline?Object.assign({},h,{documentAt:function(raw,provider,timeout){var remaining=deadline-Date.now();return remaining>0?h.documentAt(raw,provider,Math.min(timeout,remaining)):Promise.reject(new Error('Страница не ответила вовремя.'));}}):h;
+    function worker(){if(!h.current())return Promise.reject(new Error('Источник изменён.'));if(cursor>=items.length)return Promise.resolve();var at=cursor++,item=items[at],cached=h.lookup(item.id);if(!(cached&&cached._detail)&&deadline&&Date.now()>=deadline){failures++;return worker();}return (cached&&cached._detail?Promise.resolve(cached):detail(item,s,helpers)).then(function(full){result[at]=full;return worker();},function(){failures++;return worker();});}
     return Promise.all([worker(),worker(),worker()]).then(function(){
-      var available=h.search?result.filter(Boolean):result;
+      var available=result.filter(Boolean);
       return Promise.resolve(additional).then(function(extra){
         if(extra&&extra.items)available=available.concat(extra.items);
-        if(h.search&&!available.length&&failures)throw new Error('Не удалось загрузить результаты из источника.');
-        available._partial=failures>0||!!(extra&&extra.error);return available;
+        if(!available.length&&failures)throw new Error('Не удалось загрузить результаты из источника.');
+        available._partial=failures>0||!!(extra&&extra.error);available._retry=!h.search&&failures>0;return available;
       });
     });
   }

@@ -112,14 +112,14 @@
     if(params.search){var q=new URLSearchParams({do:'search',subaction:'search',story:String(params.search)});if(s.layout!=='media'&&(!options||options.titleOnly!==false)){q.set('titleonly','3');q.set('full_search','1');}if(page>1){q.set('search_start',String(page));if(s.id==='sb')q.set('result_from',String((page-1)*30+1));}target=s.base+'index.php?'+q.toString();}
     else{target=url(path,s.base);if(page>1){if(/\.html$/.test(target))throw new Error('Все фильмы этой подборки уже загружены.');target=target.replace(/\/$/,'')+'/page/'+page+'/';}}
     return documentAt(target,s,null,options).then(function(doc){
-      var rows=s.layout==='media'?WePlayWebCatalog.listing(doc,s,params,webHelpers(options)):Promise.resolve(cards(doc,s,Number(params.category)===219&&!params.search));return rows.then(function(items){var pages=page;
+      var rows=s.layout==='media'?WePlayWebCatalog.listing(doc,s,params,webHelpers(options)):Promise.resolve(cards(doc,s,Number(params.category)===219&&!params.search));return rows.then(function(items){var pages=page,partial=!!items._partial,retryPage=!!items._retry;
       if(params.search)list(doc,'[onclick],a[href]').forEach(function(a){var action=a.getAttribute('onclick')||'',href=a.getAttribute('href')||'',m=action.match(/\blist_submit\(\s*(\d+)\s*\)/)||href.match(/[?&]search_start=(\d+)/);if(m)pages=Math.max(pages,Number(m[1]));});
       else if(!((s.layout==='media'||s.layout==='re')&&Number(params.category)===219))list(doc,'a[href]').forEach(function(a){var m=(a.getAttribute('href')||'').match(/\/page\/(\d+)\//);if(m)pages=Math.max(pages,Number(m[1]));});
       var empty=/поиск по сайту не дал|ничего не найдено|не найдено|по вашему запросу/i.test(text(doc.body));
       if(!items.length&&!empty)throw new Error('Не удалось прочитать раздел сайта.');
       if((s.layout==='media'||s.layout==='re')&&!params.search){var expected=Number(params.category)===106||Number(params.category)===109?'movie':Number(params.category)===13||Number(params.category)===36?'series':null;if(expected)items=items.filter(function(item){return !union.kind(item)||union.kind(item)===expected;}).map(function(item){item._kindHint=expected;return item;});}
       items.forEach(function(item){if(Number(params.category)===13||Number(params.category)===36)item._kindHint='series';else if(Number(params.category)===106)item._kindHint='movie';});
-      return {success:true,data:{items:items,pagination:{page:page,pages:pages,total:null},partial:!!items._partial}};});
+      return {success:true,data:{items:items,pagination:{page:page,pages:pages,total:null},partial:partial,retryPage:retryPage}};});
     });
   }
   function fact(doc,label){var value='';list(doc,'.flist li,.lfs-fact,.page__list li').some(function(row){var first=row.firstElementChild;if(first&&text(first).toLowerCase().indexOf(label.toLowerCase())===0){value=text(row).slice(text(first).length).replace(/^\s*:\s*/,'').trim();return true;}return false;});return value;}
@@ -221,11 +221,11 @@
     var category=String(params.category||''),group=categoryGroups[category];
     if(group)return group.map(function(c){return {source:source(c._source),category:c.id};}).filter(function(c){return ready(c.source);});
     var pinned=sources.filter(function(s){return category.indexOf(s.id+'cat-')===0;})[0];
-    return (pinned?[pinned]:sources.filter(ready)).map(function(s){return{source:s,category:params.category};});
+    return (pinned?[pinned]:sources.filter(function(s){return ready(s)&&(s.id!=='primary'||window.WEPLAY_SETTINGS&&WEPLAY_SETTINGS.apiToken);})).map(function(s){return{source:s,category:params.category};});
   }
   function combinedRead(s,params,options){
     var saved=stored[s.id+'|'+key(params)];
-    if(health[s.id]==='unavailable'&&Date.now()-(checked[s.id]||0)<30000){if(saved)return Promise.resolve(Object.assign({},register(saved.data),{_saved:true}));return Promise.reject(new Error('Источник временно недоступен.'));}
+    if(!(options&&options.retry)&&health[s.id]==='unavailable'&&Date.now()-(checked[s.id]||0)<30000){if(saved)return Promise.resolve(Object.assign({},register(saved.data),{_saved:true}));return Promise.reject(new Error('Источник временно недоступен.'));}
     return requestFrom(s,params,true,false,options);
   }
   function resolveAmbiguous(items,media){var records=union.unresolved(items),cursor=0;function worker(){if(cursor>=records.length)return Promise.resolve();var item=records[cursor++];return rawDetail(item,true,false,false,media).catch(function(){}).then(worker);}return Promise.all([worker(),worker(),worker()]);}
@@ -236,12 +236,12 @@
     if(!feed&&savedPreview&&Date.now()-savedPreview.at<300000&&itemsOf(savedPreview.data).length){
       return Promise.resolve(register(savedPreview.data));
     }
-    if(!feed){feed={limit:limit,buffer:[],seen:[],pages:[],sources:candidates(params).map(function(c){return{source:c.source,category:c.category,next:1,ended:false};}),fresh:false,used:[],serial:Promise.resolve(),failures:[]};feeds[feedKey]=feed;}
+    if(!feed){feed={limit:limit,buffer:[],seen:[],pages:[],sources:candidates(params).map(function(c){return{source:c.source,category:c.category,next:1,ended:false,retryPages:[]};}),fresh:false,used:[],serial:Promise.resolve(),failures:[]};feeds[feedKey]=feed;}
     function freshBuffer(){var seen={};feed.seen.forEach(function(id){seen[union.canonical(id)]=true;});feed.buffer=union.combine(feed.buffer).filter(function(item){return !seen[union.canonical(item.id)];});}
-    function hasMore(){return feed.buffer.length>0||feed.sources.some(function(s){return !s.ended;});}
+    function hasMore(){return feed.buffer.length>0||feed.sources.some(function(s){return !s.ended||s.retryPages.length;});}
     function build(number){
       // A home preview is separate from the complete feed used in catalog sections.
-      var rounds=0,controller=preview?new AbortController():null,cutoff,timer,grace;
+      var rounds=0,controller=preview?new AbortController():null,cutoff,timer,grace,blocked=[],errors=[];
       var options=preview?{preview:true,deadline:Date.now()+4200,signal:controller.signal}:null;
       var finishPreview;
       if(preview)cutoff=new Promise(function(resolve,reject){
@@ -249,23 +249,24 @@
         timer=setTimeout(finishPreview,4500);
       });
       function fill(){
-        if(revision!==epoch)throw new Error('Источник изменён.');freshBuffer();var batch=feed.sources.filter(function(s){return !s.ended;});
+        if(revision!==epoch)throw new Error('Источник изменён.');freshBuffer();var batch=feed.sources.filter(function(s){return blocked.indexOf(s)<0&&(!s.ended||s.retryPages.some(function(p){return p.after<number;}));});
         if(feed.buffer.length>=feed.limit||!batch.length||rounds++>=(preview?1:4))return Promise.resolve();
-        return Promise.all(batch.map(function(cursor){var request=Object.assign({},params,{page:cursor.next,limit:60,category:cursor.category});
-          var read=preview?Promise.race([requestFrom(cursor.source,request,true,true,options),cutoff]):combinedRead(cursor.source,request);
+        return Promise.all(batch.map(function(cursor){var retryAt=cursor.retryPages.findIndex(function(p){return p.after<number;}),retry=retryAt>=0?cursor.retryPages.splice(retryAt,1)[0]:null,request=Object.assign({},params,{page:retry?retry.page:cursor.next,limit:60,category:cursor.category});
+          var read=preview?Promise.race([requestFrom(cursor.source,request,true,true,options),cutoff]):combinedRead(cursor.source,request,{retry:true,reload:!!retry});
           return read.then(function(j){
             if(preview&&!grace&&itemsOf(j).length)grace=setTimeout(finishPreview,650);
-            return {cursor:cursor,data:j};
-          },function(e){cursor.ended=true;feed.failures.push(cursor.source.id);return{error:e};});
+            return {cursor:cursor,data:j,retry:retry,page:request.page};
+          },function(e){if(preview)cursor.ended=true;else{blocked.push(cursor);errors.push(e);if(retry)cursor.retryPages.unshift(retry);}if(feed.failures.indexOf(cursor.source.id)<0)feed.failures.push(cursor.source.id);return{error:e};});
         })).then(function(results){
-          var rows=[];results.forEach(function(result){if(!result.data)return;var cursor=result.cursor,j=result.data,items=itemsOf(j),pagination=j.data&&j.data.pagination;rows.push(items);feed.fresh=feed.fresh||!j._saved;if(feed.used.indexOf(cursor.source.id)<0)feed.used.push(cursor.source.id);cursor.ended=pagination?cursor.next>=Number(pagination.pages||cursor.next):items.length<60;cursor.next++;});
+          var rows=[];results.forEach(function(result){if(!result.data)return;var cursor=result.cursor,j=result.data,items=itemsOf(j),pagination=j.data&&j.data.pagination;rows.push(items);feed.fresh=feed.fresh||!j._saved;if(feed.used.indexOf(cursor.source.id)<0)feed.used.push(cursor.source.id);if(!j.data.partial)feed.failures=feed.failures.filter(function(id){return id!==cursor.source.id;});else if(feed.failures.indexOf(cursor.source.id)<0)feed.failures.push(cursor.source.id);if(!result.retry){cursor.ended=pagination?cursor.next>=Number(pagination.pages||cursor.next):items.length<60;if(!preview&&j.data.retryPage)cursor.retryPages.push({page:result.page,after:number});cursor.next++;}});
           var length=rows.reduce(function(n,row){return Math.max(n,row.length);},0);for(var i=0;i<length;i++)rows.forEach(function(row){if(row[i])feed.buffer.push(row[i]);});return fill();
         });
       }
-      function prepare(){return fill().then(function(){return preview?null:resolveAmbiguous(feed.buffer.slice(0,feed.limit*2));}).then(function(){freshBuffer();if(feed.buffer.length<feed.limit&&feed.sources.some(function(s){return !s.ended;})&&rounds<(preview?1:4))return prepare();});}
+      function prepare(){return fill().then(function(){return preview?null:resolveAmbiguous(feed.buffer.slice(0,feed.limit*2));}).then(function(){freshBuffer();if(feed.buffer.length<feed.limit&&feed.sources.some(function(s){return blocked.indexOf(s)<0&&!s.ended;})&&rounds<(preview?1:4))return prepare();});}
       return prepare().then(function(){
         if(revision!==epoch)throw new Error('Источник изменён.');freshBuffer();var items=feed.buffer.splice(0,feed.limit);items.forEach(function(item){feed.seen.push(item.id);});
         if(!feed.used.length){var saved=stored[(preview?'home|':'all|')+key(Object.assign({},params,{page:number}))]||stored['all|'+key(Object.assign({},params,{page:number}))];if(saved){offline=true;notify();return register(saved.data);}delete feeds[feedKey];throw new Error('Каталоги сейчас недоступны. Попробуйте позже.');}
+        if(!items.length&&errors.length)throw errors[0];
         active=source(feed.used[0]);offline=!feed.fresh;var result={success:true,data:{items:items,pagination:{page:number,pages:hasMore()?number+1:number,total:null},sources:feed.used.slice(),partial:feed.failures.length>0}};
         persist((preview?'home|':'all|')+key(Object.assign({},params,{page:number})),result);notify();return result;
       }).finally(function(){clearTimeout(timer);clearTimeout(grace);});
