@@ -1,14 +1,21 @@
-/* A restrained, twelve-segment activity indicator. Only opacity is animated. */
+/* A stationary WePlay mark fills softly from the bottom while it breathes. */
 .loading-status{display:flex;align-items:center;justify-content:center;color:#e5e5e5;pointer-events:none}
-.activity-indicator{position:relative;display:block;flex-shrink:0;width:64px;height:64px;color:inherit}
-.activity-indicator>span{position:absolute;left:0;top:0;width:100%;height:100%;opacity:.2;animation:activity-pulse 1s linear infinite}
-.activity-indicator>span:before{content:'';position:absolute;left:47%;top:4%;width:6%;height:25%;border-radius:8px;background:currentColor}
+.activity-indicator{position:relative;display:block;flex-shrink:0;width:128px;height:128px;animation:weplay-loading-pulse 2.4s cubic-bezier(.45,0,.55,1) infinite}
+.activity-indicator:before,.activity-indicator>span:first-child:before{content:'';position:absolute;left:0;top:0;width:100%;height:100%;border-radius:0;background:transparent url('assets/weplay-mark.png') center center/contain no-repeat}
+.activity-indicator:before{opacity:.22}
+/* The first-child selector also upgrades the old installed shell's 12 segments. */
+.activity-indicator>span{display:none}
+.activity-indicator>span:first-child{display:block;position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;opacity:1;-webkit-mask-image:linear-gradient(to bottom,transparent 45%,#000 55%);mask-image:linear-gradient(to bottom,transparent 45%,#000 55%);-webkit-mask-size:100% 250%;mask-size:100% 250%;-webkit-mask-position:center top;mask-position:center top;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:weplay-loading-fill 2.4s cubic-bezier(.45,0,.55,1) infinite;animation-delay:0s!important}
+.activity-indicator>span:first-child:before{opacity:1}
+#weplay-startup .activity-indicator{width:160px;height:160px}
 .page-loading{position:absolute;left:0;right:0;top:0;bottom:0;z-index:8;background:#101010}
 .inline-loading{width:100%;min-height:80px}
-.inline-loading .activity-indicator,button .activity-indicator{width:32px;height:32px}
+.inline-loading .activity-indicator{width:48px;height:48px}
+button .activity-indicator{width:32px;height:32px}
 #player-loading{position:absolute;left:0;right:0;top:0;bottom:0;z-index:4;display:none;background:transparent}
 #player.native-loading #player-loading,#player.player-resolving #player-loading{display:flex;animation:activity-appear 150ms steps(1,end)}
 #player.native-loading #player-status,#player.player-resolving #player-status{visibility:hidden}
-@keyframes activity-pulse{0%{opacity:1}100%{opacity:.2}}
+@keyframes weplay-loading-pulse{0%,100%{transform:scale(.97);opacity:.82}50%{transform:scale(1.03);opacity:1}}
+@keyframes weplay-loading-fill{0%,8%{-webkit-mask-position:50% 0%;mask-position:50% 0%;opacity:1}72%,84%{-webkit-mask-position:50% 100%;mask-position:50% 100%;opacity:1}100%{-webkit-mask-position:50% 100%;mask-position:50% 100%;opacity:0}}
 @keyframes activity-appear{from{opacity:0}to{opacity:1}}
-@media(prefers-reduced-motion:reduce){.activity-indicator>span{animation-duration:2s}}
+@media(prefers-reduced-motion:reduce){.activity-indicator,.activity-indicator>span:first-child,.activity-indicator>span:first-child:before{animation:none;transform:none;-webkit-mask-image:none;mask-image:none;opacity:1}}
