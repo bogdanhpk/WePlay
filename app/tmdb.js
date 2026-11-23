@@ -1,7 +1,7 @@
 /* Authenticated metadata goes directly to TMDB; credentials never enter image URLs. */
 (function(){
   'use strict';
-  var API='https://api.themoviedb.org/3',TOKEN_KEY='weplay.tmdb.read-token.v1',pending={},pausedUntil=0,collectionLookup;
+  var API='https://api.themoviedb.org/3',TOKEN_KEY='weplay.tmdb.read-token.v1',pending={},pausedUntil=0,collectionLookup,indexLookups=new WeakMap();
   function token(){
     var configured=String(window.WEPLAY_SETTINGS&&WEPLAY_SETTINGS.tmdbReadToken||'').trim();
     // A personal installation seeds the device once. Later public APK updates keep
@@ -67,8 +67,22 @@
   }
   function matchIndex(item,entries){
     var fields=WePlayCatalogUnion.fields(item),kind=WePlayCatalogUnion.kind(item),year=(String(fields.year||'').match(/(?:19|20)\d{2}/)||[])[0]||'',ids=WePlayCatalogUnion.identifiers(item),names=[normal(item.title),normal(fields.original_title)].filter(Boolean);
+    // Large public cover indexes must not be scanned again for every visible card.
+    var lookup=indexLookups.get(entries);
+    if(!lookup){
+      lookup={ids:Object.create(null),names:Object.create(null)};
+      entries.forEach(function(entry){
+        Object.keys(entry.ids||{}).forEach(function(key){var value=key+':'+entry.ids[key];(lookup.ids[value]||(lookup.ids[value]=[])).push(entry);});
+        entry.names.forEach(function(name){var key=entry.year+'|'+name;(lookup.names[key]||(lookup.names[key]=[])).push(entry);});
+      });
+      indexLookups.set(entries,lookup);
+    }
+    var candidates=[];
+    function include(records){(records||[]).forEach(function(entry){if(candidates.indexOf(entry)<0)candidates.push(entry);});}
+    Object.keys(ids).forEach(function(key){include(lookup.ids[key+':'+ids[key]]);});
+    if(year)names.forEach(function(name){include(lookup.names[year+'|'+name]);});
     var exact=[];
-    var found=entries.filter(function(entry){
+    var found=candidates.filter(function(entry){
       if(kind&&entry.kind!==kind||year&&entry.year!==year)return false;
       var other=entry.ids||{};
       if(Object.keys(ids).some(function(key){return other[key]&&other[key]!==ids[key];}))return false;
